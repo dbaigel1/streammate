@@ -13,5 +13,11 @@ export interface Show {
 export interface SwipeData {
   showId: string;
   direction: 'left' | 'right';
-  user: 'A' | 'B';
+  user: string;
+}
+
+export interface Room {
+  code: string;
+  users: string[];
+  swipes: SwipeData[];
 }
