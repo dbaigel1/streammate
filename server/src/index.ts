@@ -19,7 +19,7 @@ const httpServer = createServer(app);
 
 const allowedOrigins = [
   process.env.CLIENT_URL || "http://localhost:5173",
-  "https://streammate.vercel.app",
+  "https://streammate.netlify.app",
   "http://localhost:5173",
 ];
 
@@ -27,9 +27,11 @@ const allowedOrigins = [
 app.use(
   cors({
     origin: (origin, callback) => {
+      console.log("Incoming request from origin:", origin);
       if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
+        console.log("CORS blocked request from:", origin);
         callback(new Error("Not allowed by CORS"));
       }
     },
@@ -49,9 +51,11 @@ const io = new Server<
 >(httpServer, {
   cors: {
     origin: (origin, callback) => {
+      console.log("WebSocket connection attempt from:", origin);
       if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
+        console.log("WebSocket CORS blocked from:", origin);
         callback(new Error("Not allowed by CORS"));
       }
     },
@@ -61,6 +65,8 @@ const io = new Server<
   },
   transports: ["websocket", "polling"],
   allowEIO3: true,
+  pingTimeout: 60000,
+  pingInterval: 25000,
 });
 
 const roomService = new RoomService();
@@ -68,6 +74,7 @@ const roomService = new RoomService();
 // Socket.IO connection handling
 io.on("connection", (socket) => {
   console.log("Client connected:", socket.id);
+  console.log("Client origin:", socket.handshake.headers.origin);
 
   socket.on("joinRoom", async (data, callback) => {
     try {
@@ -150,6 +157,7 @@ io.on("connection", (socket) => {
   });
 
   socket.on("disconnect", () => {
+    console.log("Client disconnected:", socket.id);
     const { userId, roomCode } = socket.data;
     if (!userId || !roomCode) return;
 
@@ -157,6 +165,10 @@ io.on("connection", (socket) => {
     if (room && user) {
       socket.to(roomCode).emit("userLeft", user.id);
     }
+  });
+
+  socket.on("error", (error) => {
+    console.error("Socket error:", error);
   });
 });
 

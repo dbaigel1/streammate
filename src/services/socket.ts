@@ -4,26 +4,94 @@ import {
   ServerToClientEvents,
 } from "../../server/src/types/index.js";
 
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || "http://localhost:3000";
-
 class SocketService {
-  private socket: Socket<ServerToClientEvents, ClientToServerEvents> | null =
-    null;
+  private socket: Socket<ServerToClientEvents, ClientToServerEvents>;
+  private static instance: SocketService;
+  private reconnectAttempts = 0;
+  private maxReconnectAttempts = 5;
+
+  constructor() {
+    const socketUrl =
+      import.meta.env.VITE_SOCKET_URL || "http://localhost:3000";
+    console.log("Connecting to socket server at:", socketUrl);
+
+    this.socket = io(socketUrl, {
+      transports: ["websocket", "polling"],
+      reconnection: true,
+      reconnectionAttempts: this.maxReconnectAttempts,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      timeout: 20000,
+      autoConnect: true,
+    });
+
+    this.setupEventListeners();
+  }
+
+  private setupEventListeners() {
+    this.socket.on("connect", () => {
+      console.log("Socket connected successfully");
+      this.reconnectAttempts = 0;
+    });
+
+    this.socket.on("connect_error", (error) => {
+      console.error("Connection error:", error.message);
+      this.reconnectAttempts++;
+      if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+        console.error("Max reconnection attempts reached");
+      }
+    });
+
+    this.socket.on("disconnect", (reason) => {
+      console.log("Socket disconnected:", reason);
+      if (reason === "io server disconnect") {
+        // Server initiated disconnect, try to reconnect
+        this.socket.connect();
+      }
+    });
+
+    this.socket.io.on("reconnect", (attempt) => {
+      console.log("Socket reconnected after", attempt, "attempts");
+    });
+
+    this.socket.io.on("reconnect_error", (error) => {
+      console.error("Reconnection error:", error);
+    });
+
+    this.socket.io.on("reconnect_failed", () => {
+      console.error(
+        "Failed to reconnect after",
+        this.maxReconnectAttempts,
+        "attempts"
+      );
+    });
+
+    this.socket.io.on("error", (error) => {
+      console.error("Socket.IO error:", error);
+    });
+
+    this.socket.io.on("ping", () => {
+      console.log("Ping sent to server");
+    });
+  }
 
   connect() {
     if (this.socket?.connected) return;
 
-    this.socket = io(SOCKET_URL, {
-      autoConnect: true,
-      reconnection: true,
-      reconnectionAttempts: Infinity,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
-      timeout: 20000,
-      transports: ["websocket", "polling"],
-      withCredentials: true,
-      forceNew: true,
-    });
+    this.socket = io(
+      import.meta.env.VITE_SOCKET_URL || "http://localhost:3000",
+      {
+        autoConnect: true,
+        reconnection: true,
+        reconnectionAttempts: Infinity,
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 5000,
+        timeout: 20000,
+        transports: ["websocket", "polling"],
+        withCredentials: true,
+        forceNew: true,
+      }
+    );
 
     this.socket.on("connect", () => {
       console.log("Connected to server with ID:", this.socket?.id);
