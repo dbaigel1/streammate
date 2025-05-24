@@ -8,7 +8,7 @@ import RoomStatus from '@/components/RoomStatus';
 import { Show, SwipeData, Room } from '@/types/show';
 import { mockShows } from '@/data/mockShows';
 
-const Index = () => {
+const Index: React.FC = () => {
   const [currentShowIndex, setCurrentShowIndex] = useState(0);
   const [room, setRoom] = useState<Room | null>(null);
   const [currentUser, setCurrentUser] = useState<string>('');
