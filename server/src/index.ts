@@ -78,17 +78,37 @@ io.on("connection", (socket) => {
 
   socket.on("joinRoom", async (data, callback) => {
     try {
+      console.log("Join room attempt:", {
+        roomCode: data.roomCode,
+        username: data.username,
+        socketId: socket.id,
+      });
+
       let result;
 
       // Try to join existing room first
       result = roomService.joinRoom(data.roomCode, data.username, socket.id);
+      console.log("Join room result:", result ? "Success" : "Room not found");
 
       // If room doesn't exist, create a new one
       if (!result) {
+        console.log("Creating new room for:", data.username);
         result = roomService.createRoom(data.username, socket.id);
       }
 
+      if (!result) {
+        console.error("Failed to create or join room");
+        callback("Failed to create or join room");
+        return;
+      }
+
       const { room, user } = result;
+      console.log("Room joined successfully:", {
+        roomCode: room.code,
+        userId: user.id,
+        username: user.username,
+        totalUsers: room.users.length,
+      });
 
       // Store user data in socket
       socket.data = {
@@ -98,12 +118,15 @@ io.on("connection", (socket) => {
 
       // Join socket.io room
       await socket.join(room.code);
+      console.log("Socket joined room:", room.code);
 
       // Notify the user who just joined
       socket.emit("roomJoined", room);
+      console.log("Emitted roomJoined event to:", socket.id);
 
       // Notify other users in the room
       socket.to(room.code).emit("userJoined", user);
+      console.log("Emitted userJoined event to room:", room.code);
 
       callback();
     } catch (error) {

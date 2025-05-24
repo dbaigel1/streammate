@@ -11,22 +11,21 @@ import { useToast } from "@/components/ui/use-toast";
 import { User } from "../../server/src/types/index.js";
 
 const Index: React.FC = () => {
-  const [currentShowIndex, setCurrentShowIndex] = useState(0);
   const [room, setRoom] = useState<Room | null>(null);
-  const [currentUser, setCurrentUser] = useState<string>("");
+  const [currentUser, setCurrentUser] = useState("");
+  const [currentShowIndex, setCurrentShowIndex] = useState(0);
   const [matchedShow, setMatchedShow] = useState<Show | null>(null);
+  const [isConnecting, setIsConnecting] = useState(false);
   const { toast } = useToast();
 
   const currentShow = mockShows[currentShowIndex];
 
   useEffect(() => {
-    // Connect to socket server
-    socketService.connect();
-
     // Set up socket event listeners
     socketService.onRoomJoined((room) => {
       console.log("Room joined:", room);
       setRoom(room);
+      setIsConnecting(false);
     });
 
     socketService.onUserJoined((user) => {
@@ -109,14 +108,18 @@ const Index: React.FC = () => {
 
   const handleJoinRoom = async (roomCode: string, username: string) => {
     try {
+      setIsConnecting(true);
       await socketService.joinRoom(roomCode, username);
       setCurrentUser(username);
     } catch (error) {
       console.error("Error joining room:", error);
+      setIsConnecting(false);
       toast({
         title: "Error",
         description:
-          error instanceof Error ? error.message : "Failed to join room",
+          error instanceof Error
+            ? error.message
+            : "Failed to join room. Please try again.",
         variant: "destructive",
       });
     }

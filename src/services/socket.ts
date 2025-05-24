@@ -9,6 +9,7 @@ class SocketService {
   private static instance: SocketService;
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
+  private connectionPromise: Promise<void> | null = null;
 
   constructor() {
     const socketUrl =
@@ -22,7 +23,7 @@ class SocketService {
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
       timeout: 20000,
-      autoConnect: true,
+      autoConnect: false,
     });
 
     this.setupEventListeners();
@@ -75,56 +76,79 @@ class SocketService {
     });
   }
 
-  connect() {
-    if (this.socket?.connected) return;
+  private ensureConnected(): Promise<void> {
+    if (this.socket.connected) {
+      return Promise.resolve();
+    }
 
-    this.socket = io(
-      import.meta.env.VITE_SOCKET_URL || "http://localhost:3000",
-      {
-        autoConnect: true,
-        reconnection: true,
-        reconnectionAttempts: Infinity,
-        reconnectionDelay: 1000,
-        reconnectionDelayMax: 5000,
-        timeout: 20000,
-        transports: ["websocket", "polling"],
-        withCredentials: true,
-        forceNew: true,
+    if (this.connectionPromise) {
+      return this.connectionPromise;
+    }
+
+    this.connectionPromise = new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error("Connection timeout"));
+      }, 10000);
+
+      this.socket.once("connect", () => {
+        clearTimeout(timeout);
+        this.connectionPromise = null;
+        resolve();
+      });
+
+      this.socket.once("connect_error", (error) => {
+        clearTimeout(timeout);
+        this.connectionPromise = null;
+        reject(error);
+      });
+
+      this.socket.connect();
+    });
+
+    return this.connectionPromise;
+  }
+
+  async joinRoom(roomCode: string, username: string): Promise<void> {
+    try {
+      // Ensure we're connected before attempting to join
+      await this.ensureConnected();
+
+      // Normalize the room code
+      const normalizedRoomCode = roomCode.trim().toUpperCase();
+
+      if (!normalizedRoomCode || normalizedRoomCode.length !== 6) {
+        throw new Error("Invalid room code format");
       }
-    );
 
-    this.socket.on("connect", () => {
-      console.log("Connected to server with ID:", this.socket?.id);
-    });
-
-    this.socket.on("connect_error", (error) => {
-      console.error("Connection error:", error.message);
-      // Try to reconnect with polling if websocket fails
-      if (this.socket?.io.opts.transports?.[0] === "websocket") {
-        console.log("Falling back to polling transport");
-        this.socket.io.opts.transports = ["polling", "websocket"];
+      if (!username.trim()) {
+        throw new Error("Username is required");
       }
-    });
 
-    this.socket.on("disconnect", (reason) => {
-      console.log("Disconnected from server:", reason);
-      if (reason === "io server disconnect") {
-        // Server initiated disconnect, try to reconnect
-        this.socket?.connect();
-      }
-    });
+      return new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error("Join room timeout"));
+        }, 10000);
 
-    this.socket.io.on("reconnect", (attemptNumber) => {
-      console.log("Reconnected after", attemptNumber, "attempts");
-    });
-
-    this.socket.io.on("reconnect_error", (error) => {
-      console.error("Reconnection error:", error);
-    });
-
-    this.socket.io.on("reconnect_failed", () => {
-      console.error("Failed to reconnect");
-    });
+        this.socket.emit(
+          "joinRoom",
+          {
+            roomCode: normalizedRoomCode,
+            username: username.trim(),
+          },
+          (error) => {
+            clearTimeout(timeout);
+            if (error) {
+              reject(new Error(error));
+            } else {
+              resolve();
+            }
+          }
+        );
+      });
+    } catch (error) {
+      console.error("Error in joinRoom:", error);
+      throw error;
+    }
   }
 
   disconnect() {
@@ -132,23 +156,6 @@ class SocketService {
       this.socket.disconnect();
       this.socket = null;
     }
-  }
-
-  joinRoom(roomCode: string, username: string): Promise<void> {
-    return new Promise((resolve, reject) => {
-      if (!this.socket) {
-        reject(new Error("Socket not connected"));
-        return;
-      }
-
-      this.socket.emit("joinRoom", { roomCode, username }, (error) => {
-        if (error) {
-          reject(new Error(error));
-        } else {
-          resolve();
-        }
-      });
-    });
   }
 
   leaveRoom() {
