@@ -7,8 +7,8 @@
   "scripts": {
     "dev": "tsc -w & node --watch dist/index.js",
     "prebuild": "npm run clean",
-    "build": "echo 'Building TypeScript...' && tsc --listFiles && tsc && echo 'Build complete. Contents of dist:' && ls -la dist/",
-    "start": "echo 'Starting server...' && node dist/index.js",
+    "build": "echo 'Starting build process...' > build.log && echo 'Current directory:' >> build.log && pwd >> build.log && echo 'Directory contents:' >> build.log && ls -la >> build.log && echo 'Building TypeScript...' >> build.log && tsc --listFiles >> build.log 2>&1 && tsc >> build.log 2>&1 && echo 'Build complete. Contents of dist:' >> build.log && ls -la dist/ >> build.log 2>&1 && cat build.log",
+    "start": "echo 'Starting server...' && ls -la dist/ && node dist/index.js",
     "test": "echo \"Error: no test specified\" && exit 1",
     "clean": "echo 'Cleaning dist directory...' && rm -rf dist && mkdir dist"
   },
