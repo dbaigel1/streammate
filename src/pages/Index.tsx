@@ -17,18 +17,28 @@ const Index = () => {
   const currentShow = mockShows[currentShowIndex];
 
   const handleJoinRoom = (roomCode: string, username: string) => {
+    console.log(`Creating/joining room ${roomCode} with user ${username}`);
     // In a real app, this would connect to a backend
     // For now, we'll simulate room creation/joining
-    setRoom({
+    const newRoom: Room = {
       code: roomCode,
       users: [username], // In real app, this would be fetched from server
       swipes: []
-    });
+    };
+    
+    setRoom(newRoom);
     setCurrentUser(username);
+    console.log('Room created:', newRoom);
+    console.log('Current user set:', username);
   };
 
   const handleSwipe = (direction: 'left' | 'right') => {
-    if (!currentShow || !room) return;
+    if (!currentShow || !room) {
+      console.log('Cannot swipe: missing show or room', { currentShow, room });
+      return;
+    }
+
+    console.log(`Processing swipe: ${direction} by ${currentUser} on ${currentShow.title}`);
 
     const swipeData: SwipeData = {
       showId: currentShow.id,
@@ -37,10 +47,13 @@ const Index = () => {
     };
 
     const newSwipes = [...room.swipes, swipeData];
-    setRoom({
+    const updatedRoom = {
       ...room,
       swipes: newSwipes
-    });
+    };
+    
+    setRoom(updatedRoom);
+    console.log('Updated swipes:', newSwipes);
 
     // Check if all users in the room have swiped right on this show
     if (direction === 'right') {
@@ -52,8 +65,12 @@ const Index = () => {
         rightSwipesForShow.map(swipe => swipe.user)
       );
 
+      console.log(`Users who swiped right on ${currentShow.title}:`, Array.from(usersWhoSwipedRight));
+      console.log(`Total users in room: ${room.users.length}`);
+
       // If all users in the room have swiped right on this show, it's a match!
       if (usersWhoSwipedRight.size === room.users.length) {
+        console.log('MATCH FOUND!', currentShow.title);
         setMatchedShow(currentShow);
         return;
       }
@@ -65,11 +82,13 @@ const Index = () => {
     );
 
     if (currentUserSwipesForShow.length > 0) {
+      console.log('Moving to next show');
       setCurrentShowIndex(prev => prev + 1);
     }
   };
 
   const resetApp = () => {
+    console.log('Resetting app');
     setCurrentShowIndex(0);
     setRoom(null);
     setCurrentUser('');
@@ -77,6 +96,7 @@ const Index = () => {
   };
 
   const leaveRoom = () => {
+    console.log('Leaving room');
     setRoom(null);
     setCurrentUser('');
     setMatchedShow(null);
@@ -85,11 +105,13 @@ const Index = () => {
 
   // Show room entry if not in a room
   if (!room) {
+    console.log('Showing room entry screen');
     return <RoomEntry onJoinRoom={handleJoinRoom} />;
   }
 
   // Show match screen if there's a match
   if (matchedShow) {
+    console.log('Showing match screen for:', matchedShow.title);
     return <MatchScreen show={matchedShow} onReset={resetApp} />;
   }
 
@@ -118,6 +140,8 @@ const Index = () => {
       </div>
     );
   }
+
+  console.log('Showing swipe screen for room:', room.code, 'user:', currentUser);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-600 via-pink-600 to-blue-600 flex flex-col items-center justify-center p-4">

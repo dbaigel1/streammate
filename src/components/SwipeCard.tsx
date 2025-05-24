@@ -6,7 +6,7 @@ import { Star, Calendar, Tag } from 'lucide-react';
 interface SwipeCardProps {
   show: Show;
   onSwipe: (direction: 'left' | 'right') => void;
-  currentUser: 'A' | 'B';
+  currentUser: string;
 }
 
 const SwipeCard: React.FC<SwipeCardProps> = ({ show, onSwipe, currentUser }) => {
@@ -14,6 +14,7 @@ const SwipeCard: React.FC<SwipeCardProps> = ({ show, onSwipe, currentUser }) => 
   const [animationDirection, setAnimationDirection] = useState<'left' | 'right'>('left');
 
   const handleSwipe = (direction: 'left' | 'right') => {
+    console.log(`${currentUser} swiping ${direction} on ${show.title}`);
     setAnimationDirection(direction);
     setIsAnimating(true);
     
