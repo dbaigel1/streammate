@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -24,15 +24,29 @@ const RoomEntry: React.FC<RoomEntryProps> = ({
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<string | null>(null);
+  const [isButtonDisabled, setIsButtonDisabled] = useState(false);
+
+  // Debug logging for state changes
+  useEffect(() => {
+    console.log("RoomEntry state:", {
+      isConnecting,
+      isCreating,
+      hasRoomCode: !!roomCode.trim(),
+      hasUsername: !!username.trim(),
+      isButtonDisabled,
+    });
+  }, [isConnecting, isCreating, roomCode, username, isButtonDisabled]);
 
   const generateRoomCode = async () => {
     try {
       setError(null);
       setConnectionStatus("Creating room...");
+      setIsButtonDisabled(true);
 
       if (!username.trim()) {
         setError("Please enter your name");
         setConnectionStatus(null);
+        setIsButtonDisabled(false);
         return;
       }
 
@@ -52,6 +66,7 @@ const RoomEntry: React.FC<RoomEntryProps> = ({
       );
       setIsCreating(false);
       setConnectionStatus(null);
+      setIsButtonDisabled(false);
     }
   };
 
@@ -59,20 +74,24 @@ const RoomEntry: React.FC<RoomEntryProps> = ({
     try {
       setError(null);
       setConnectionStatus("Connecting to room...");
+      setIsButtonDisabled(true);
 
       if (!username.trim()) {
         setError("Please enter your name");
         setConnectionStatus(null);
+        setIsButtonDisabled(false);
         return;
       }
       if (!roomCode.trim()) {
         setError("Please enter a room code");
         setConnectionStatus(null);
+        setIsButtonDisabled(false);
         return;
       }
       if (roomCode.trim().length !== 6) {
         setError("Room code must be 6 characters");
         setConnectionStatus(null);
+        setIsButtonDisabled(false);
         return;
       }
 
@@ -81,8 +100,16 @@ const RoomEntry: React.FC<RoomEntryProps> = ({
       console.error("Error joining room:", error);
       setError(error instanceof Error ? error.message : "Failed to join room");
       setConnectionStatus(null);
+      setIsButtonDisabled(false);
     }
   };
+
+  // Reset button state when inputs change
+  useEffect(() => {
+    if (error || connectionStatus) {
+      setIsButtonDisabled(false);
+    }
+  }, [error, connectionStatus]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-600 via-pink-600 to-blue-600 flex items-center justify-center p-4">
@@ -121,8 +148,12 @@ const RoomEntry: React.FC<RoomEntryProps> = ({
           <div className="space-y-4">
             <Button
               onClick={generateRoomCode}
-              className="w-full bg-green-500 hover:bg-green-600 text-white"
-              disabled={!username.trim() || isCreating || isConnecting}
+              className={`w-full ${
+                isButtonDisabled
+                  ? "bg-gray-400 cursor-not-allowed"
+                  : "bg-green-500 hover:bg-green-600"
+              } text-white`}
+              disabled={!username.trim() || isButtonDisabled}
             >
               <Plus className="w-4 h-4 mr-2" />
               {isCreating ? "Creating Room..." : "Create New Room"}
@@ -161,12 +192,13 @@ const RoomEntry: React.FC<RoomEntryProps> = ({
 
             <Button
               onClick={handleJoinRoom}
-              className="w-full bg-blue-500 hover:bg-blue-600 text-white"
+              className={`w-full ${
+                isButtonDisabled
+                  ? "bg-gray-400 cursor-not-allowed"
+                  : "bg-blue-500 hover:bg-blue-600"
+              } text-white`}
               disabled={
-                !roomCode.trim() ||
-                !username.trim() ||
-                isCreating ||
-                isConnecting
+                !roomCode.trim() || !username.trim() || isButtonDisabled
               }
             >
               <LogIn className="w-4 h-4 mr-2" />
@@ -182,6 +214,7 @@ const RoomEntry: React.FC<RoomEntryProps> = ({
                   setError(null);
                   setConnectionStatus(null);
                   setIsCreating(false);
+                  setIsButtonDisabled(false);
                 }}
                 className="text-xs text-red-600 hover:text-red-800 mt-2 underline"
               >

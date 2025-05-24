@@ -23,6 +23,9 @@ const Index: React.FC = () => {
   useEffect(() => {
     let mounted = true;
 
+    // Debug logging for connection state
+    console.log("Index component mounted, setting up socket listeners");
+
     // Set up socket event listeners
     socketService.onRoomJoined((room) => {
       console.log("Room joined:", room);
@@ -105,7 +108,9 @@ const Index: React.FC = () => {
 
     // Cleanup on unmount
     return () => {
+      console.log("Index component unmounting, cleaning up");
       mounted = false;
+      setIsConnecting(false); // Reset connecting state on unmount
       socketService.disconnect();
       socketService.offRoomJoined(() => {});
       socketService.offUserJoined(() => {});
@@ -114,18 +119,23 @@ const Index: React.FC = () => {
       socketService.offMatchFound(() => {});
       socketService.offError(() => {});
     };
-  }, [room, toast]);
+  }, [toast]); // Remove room from dependencies to prevent unnecessary re-renders
 
   const handleJoinRoom = async (roomCode: string, username: string) => {
     try {
+      console.log("Starting room join process:", { roomCode, username });
       setIsConnecting(true);
-      console.log("Joining room:", { roomCode, username });
+
+      // Reset any existing room state
+      setRoom(null);
+      setCurrentUser("");
+      setMatchedShow(null);
+      setCurrentShowIndex(0);
 
       await socketService.joinRoom(roomCode, username);
       setCurrentUser(username);
 
-      // If we get here, the room was joined successfully
-      console.log("Room joined successfully");
+      console.log("Room join successful");
     } catch (error) {
       console.error("Error joining room:", error);
       setIsConnecting(false);
