@@ -18,6 +18,11 @@ const RoomEntry: React.FC<RoomEntryProps> = ({ onJoinRoom }) => {
     const code = Math.random().toString(36).substring(2, 8).toUpperCase();
     setRoomCode(code);
     setIsCreating(true);
+    
+    // Automatically join the room after creating it
+    setTimeout(() => {
+      onJoinRoom(code, username.trim());
+    }, 500); // Small delay to show the room created message
   };
 
   const handleJoinRoom = () => {
@@ -57,10 +62,10 @@ const RoomEntry: React.FC<RoomEntryProps> = ({ onJoinRoom }) => {
             <Button
               onClick={generateRoomCode}
               className="w-full bg-green-500 hover:bg-green-600 text-white"
-              disabled={!username.trim()}
+              disabled={!username.trim() || isCreating}
             >
               <Plus className="w-4 h-4 mr-2" />
-              Create New Room
+              {isCreating ? 'Creating Room...' : 'Create New Room'}
             </Button>
 
             <div className="relative">
@@ -84,13 +89,14 @@ const RoomEntry: React.FC<RoomEntryProps> = ({ onJoinRoom }) => {
                 onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
                 className="w-full uppercase"
                 maxLength={6}
+                disabled={isCreating}
               />
             </div>
 
             <Button
               onClick={handleJoinRoom}
               className="w-full bg-blue-500 hover:bg-blue-600 text-white"
-              disabled={!roomCode.trim() || !username.trim()}
+              disabled={!roomCode.trim() || !username.trim() || isCreating}
             >
               <LogIn className="w-4 h-4 mr-2" />
               Join Room
@@ -104,7 +110,7 @@ const RoomEntry: React.FC<RoomEntryProps> = ({ onJoinRoom }) => {
                 Room Created!
               </p>
               <p className="text-xs text-green-600 mt-1">
-                Share code <span className="font-mono font-bold">{roomCode}</span> with others
+                Joining room <span className="font-mono font-bold">{roomCode}</span>
               </p>
             </div>
           )}
