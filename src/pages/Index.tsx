@@ -11,8 +11,29 @@ import { useToast } from "@/components/ui/use-toast";
 import { User } from "../../server/src/types/index.js";
 
 const Index: React.FC = () => {
-  const [room, setRoom] = useState<Room | null>(null);
-  const [currentUser, setCurrentUser] = useState("");
+  const [room, setRoom] = useState<Room | null>(() => {
+    // Try to restore room state from localStorage
+    const savedRoom = localStorage.getItem("room");
+    const savedUser = localStorage.getItem("currentUser");
+    if (savedRoom && savedUser) {
+      try {
+        const parsedRoom = JSON.parse(savedRoom);
+        // Validate that the room data is still valid
+        if (parsedRoom && parsedRoom.code && Array.isArray(parsedRoom.users)) {
+          console.log("Restoring room state from localStorage:", parsedRoom);
+          return parsedRoom;
+        }
+      } catch (e) {
+        console.error("Error parsing saved room:", e);
+      }
+    }
+    return null;
+  });
+
+  const [currentUser, setCurrentUser] = useState(() => {
+    return localStorage.getItem("currentUser") || "";
+  });
+
   const [currentShowIndex, setCurrentShowIndex] = useState(0);
   const [matchedShow, setMatchedShow] = useState<Show | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
@@ -20,17 +41,56 @@ const Index: React.FC = () => {
 
   const currentShow = mockShows[currentShowIndex];
 
+  // Save room state to localStorage whenever it changes
+  useEffect(() => {
+    if (room) {
+      localStorage.setItem("room", JSON.stringify(room));
+      localStorage.setItem("currentUser", currentUser);
+    } else {
+      localStorage.removeItem("room");
+      localStorage.removeItem("currentUser");
+    }
+  }, [room, currentUser]);
+
+  // Attempt to rejoin room on mount if we have saved state
   useEffect(() => {
     let mounted = true;
 
-    // Debug logging for connection state
-    console.log("Index component mounted, setting up socket listeners");
+    const attemptRejoin = async () => {
+      if (room && currentUser && !isConnecting) {
+        console.log("Attempting to rejoin room:", room.code);
+        try {
+          setIsConnecting(true);
+          await socketService.joinRoom(room.code, currentUser);
+          console.log("Successfully rejoined room");
+        } catch (error) {
+          console.error("Failed to rejoin room:", error);
+          // Clear saved state if we can't rejoin
+          setRoom(null);
+          setCurrentUser("");
+          localStorage.removeItem("room");
+          localStorage.removeItem("currentUser");
+          toast({
+            title: "Connection Error",
+            description:
+              "Could not rejoin room. Please create or join a new room.",
+            variant: "destructive",
+          });
+        } finally {
+          if (mounted) {
+            setIsConnecting(false);
+          }
+        }
+      }
+    };
+
+    attemptRejoin();
 
     // Set up socket event listeners
-    socketService.onRoomJoined((room) => {
-      console.log("Room joined:", room);
+    socketService.onRoomJoined((newRoom) => {
+      console.log("Room joined:", newRoom);
       if (mounted) {
-        setRoom(room);
+        setRoom(newRoom);
         setIsConnecting(false);
       }
     });
@@ -106,11 +166,10 @@ const Index: React.FC = () => {
       }
     });
 
-    // Cleanup on unmount
     return () => {
       console.log("Index component unmounting, cleaning up");
       mounted = false;
-      setIsConnecting(false); // Reset connecting state on unmount
+      setIsConnecting(false);
       socketService.disconnect();
       socketService.offRoomJoined(() => {});
       socketService.offUserJoined(() => {});
@@ -119,7 +178,7 @@ const Index: React.FC = () => {
       socketService.offMatchFound(() => {});
       socketService.offError(() => {});
     };
-  }, [toast]); // Remove room from dependencies to prevent unnecessary re-renders
+  }, [toast]); // Remove room and currentUser from dependencies
 
   const handleJoinRoom = async (roomCode: string, username: string) => {
     try {
@@ -131,6 +190,8 @@ const Index: React.FC = () => {
       setCurrentUser("");
       setMatchedShow(null);
       setCurrentShowIndex(0);
+      localStorage.removeItem("room");
+      localStorage.removeItem("currentUser");
 
       await socketService.joinRoom(roomCode, username);
       setCurrentUser(username);
@@ -147,7 +208,7 @@ const Index: React.FC = () => {
             : "Failed to join room. Please try again.",
         variant: "destructive",
       });
-      throw error; // Re-throw to let RoomEntry handle the error
+      throw error;
     }
   };
 
@@ -181,6 +242,8 @@ const Index: React.FC = () => {
     setCurrentUser("");
     setMatchedShow(null);
     setCurrentShowIndex(0);
+    localStorage.removeItem("room");
+    localStorage.removeItem("currentUser");
   };
 
   // Show room entry if not in a room

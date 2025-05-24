@@ -11,6 +11,8 @@ class SocketService {
   private maxReconnectAttempts = 5;
   private connectionPromise: Promise<void> | null = null;
   private isConnecting = false;
+  private lastRoomCode: string | null = null;
+  private lastUsername: string | null = null;
 
   constructor() {
     const socketUrl =
@@ -36,6 +38,14 @@ class SocketService {
       console.log("Socket connected successfully with ID:", this.socket.id);
       this.reconnectAttempts = 0;
       this.isConnecting = false;
+
+      // Attempt to rejoin room if we have stored credentials
+      if (this.lastRoomCode && this.lastUsername) {
+        console.log("Attempting to rejoin room after reconnection");
+        this.joinRoom(this.lastRoomCode, this.lastUsername).catch((error) => {
+          console.error("Failed to rejoin room after reconnection:", error);
+        });
+      }
     });
 
     this.socket.on("connect_error", (error) => {
@@ -136,6 +146,10 @@ class SocketService {
     try {
       console.log("Attempting to join room:", { roomCode, username });
 
+      // Store credentials for reconnection
+      this.lastRoomCode = roomCode;
+      this.lastUsername = username;
+
       // Ensure we're connected before attempting to join
       await this.ensureConnected();
 
@@ -176,6 +190,9 @@ class SocketService {
       });
     } catch (error) {
       console.error("Error in joinRoom:", error);
+      // Clear stored credentials on error
+      this.lastRoomCode = null;
+      this.lastUsername = null;
       throw error;
     }
   }
@@ -188,9 +205,10 @@ class SocketService {
   }
 
   leaveRoom() {
-    if (this.socket) {
-      this.socket.emit("leaveRoom");
-    }
+    console.log("Leaving room");
+    this.lastRoomCode = null;
+    this.lastUsername = null;
+    this.socket.emit("leaveRoom");
   }
 
   swipe(showId: string, direction: "left" | "right") {

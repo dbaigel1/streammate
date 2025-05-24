@@ -9,6 +9,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Users, Plus, LogIn } from "lucide-react";
+import { Label } from "@/components/ui/label";
 
 interface RoomEntryProps {
   onJoinRoom: (roomCode: string, username: string) => void;
@@ -25,6 +26,7 @@ const RoomEntry: React.FC<RoomEntryProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<string | null>(null);
   const [isButtonDisabled, setIsButtonDisabled] = useState(false);
+  const [activeTab, setActiveTab] = useState<"create" | "join">("create");
 
   // Debug logging for state changes
   useEffect(() => {
@@ -34,8 +36,16 @@ const RoomEntry: React.FC<RoomEntryProps> = ({
       hasRoomCode: !!roomCode.trim(),
       hasUsername: !!username.trim(),
       isButtonDisabled,
+      activeTab,
     });
-  }, [isConnecting, isCreating, roomCode, username, isButtonDisabled]);
+  }, [
+    isConnecting,
+    isCreating,
+    roomCode,
+    username,
+    isButtonDisabled,
+    activeTab,
+  ]);
 
   const generateRoomCode = async () => {
     try {
@@ -113,98 +123,140 @@ const RoomEntry: React.FC<RoomEntryProps> = ({
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-600 via-pink-600 to-blue-600 flex items-center justify-center p-4">
-      <Card className="w-full max-w-md mx-auto">
-        <CardHeader className="text-center">
-          <CardTitle className="text-2xl font-bold text-gray-900 mb-2">
-            🍿 Show Match
-          </CardTitle>
-          <CardDescription>
-            Create or join a room to find shows to watch together
-          </CardDescription>
-        </CardHeader>
+      <Card className="w-full max-w-md bg-white/95 backdrop-blur-sm shadow-xl">
+        <CardHeader className="space-y-4">
+          <div className="text-center">
+            <h1 className="text-3xl font-bold text-gray-900">Streammate</h1>
+            <p className="text-gray-600 mt-2">
+              Find your next binge-worthy show together
+            </p>
+          </div>
 
-        <CardContent className="space-y-6">
+          {/* Username Input - Always visible at the top */}
           <div className="space-y-2">
-            <label
-              htmlFor="username"
-              className="text-sm font-medium text-gray-700"
-            >
-              Your Name
-            </label>
+            <Label htmlFor="username" className="text-gray-700 font-medium">
+              Your Name <span className="text-red-500">*</span>
+            </Label>
             <Input
               id="username"
               type="text"
               placeholder="Enter your name"
               value={username}
-              onChange={(e) => {
-                setUsername(e.target.value);
-                setError(null);
-              }}
+              onChange={(e) => setUsername(e.target.value)}
               className="w-full"
               disabled={isConnecting || isCreating}
             />
+            {!username.trim() && (
+              <p className="text-sm text-red-500 mt-1">
+                Please enter your name to continue
+              </p>
+            )}
           </div>
 
-          <div className="space-y-4">
-            <Button
-              onClick={generateRoomCode}
-              className={`w-full ${
-                isButtonDisabled
-                  ? "bg-gray-400 cursor-not-allowed"
-                  : "bg-green-500 hover:bg-green-600"
-              } text-white`}
-              disabled={!username.trim() || isButtonDisabled}
+          {/* Tab Navigation */}
+          <div className="flex space-x-2 border-b border-gray-200">
+            <button
+              onClick={() => setActiveTab("create")}
+              className={`flex-1 py-2 text-center font-medium transition-colors ${
+                activeTab === "create"
+                  ? "text-purple-600 border-b-2 border-purple-600"
+                  : "text-gray-500 hover:text-gray-700"
+              }`}
             >
-              <Plus className="w-4 h-4 mr-2" />
-              {isCreating ? "Creating Room..." : "Create New Room"}
-            </Button>
+              Create Room
+            </button>
+            <button
+              onClick={() => setActiveTab("join")}
+              className={`flex-1 py-2 text-center font-medium transition-colors ${
+                activeTab === "join"
+                  ? "text-purple-600 border-b-2 border-purple-600"
+                  : "text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              Join Room
+            </button>
+          </div>
+        </CardHeader>
 
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t border-gray-300" />
+        <CardContent className="space-y-6">
+          {activeTab === "create" ? (
+            // Create Room Tab
+            <div className="space-y-4">
+              <div className="bg-purple-50 rounded-lg p-4">
+                <h3 className="font-medium text-purple-900 mb-2">
+                  Create a New Room
+                </h3>
+                <p className="text-sm text-purple-700">
+                  Start a new room and invite friends to join. You'll get a
+                  unique room code to share.
+                </p>
               </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-white px-2 text-gray-500">Or</span>
-              </div>
-            </div>
 
-            <div className="space-y-2">
-              <label
-                htmlFor="roomCode"
-                className="text-sm font-medium text-gray-700"
+              <Button
+                onClick={generateRoomCode}
+                className={`w-full ${
+                  isButtonDisabled
+                    ? "bg-gray-400 cursor-not-allowed"
+                    : "bg-purple-500 hover:bg-purple-600"
+                } text-white`}
+                disabled={!username.trim() || isButtonDisabled}
               >
-                Room Code
-              </label>
-              <Input
-                id="roomCode"
-                type="text"
-                placeholder="Enter room code"
-                value={roomCode}
-                onChange={(e) => {
-                  setRoomCode(e.target.value.toUpperCase());
-                  setError(null);
-                }}
-                className="w-full uppercase"
-                maxLength={6}
-                disabled={isCreating || isConnecting}
-              />
+                <Plus className="w-4 h-4 mr-2" />
+                {isCreating ? "Creating Room..." : "Create New Room"}
+              </Button>
             </div>
+          ) : (
+            // Join Room Tab
+            <div className="space-y-4">
+              <div className="bg-blue-50 rounded-lg p-4">
+                <h3 className="font-medium text-blue-900 mb-2">Join a Room</h3>
+                <p className="text-sm text-blue-700">
+                  Enter the 6-character room code to join an existing room.
+                </p>
+              </div>
 
-            <Button
-              onClick={handleJoinRoom}
-              className={`w-full ${
-                isButtonDisabled
-                  ? "bg-gray-400 cursor-not-allowed"
-                  : "bg-blue-500 hover:bg-blue-600"
-              } text-white`}
-              disabled={
-                !roomCode.trim() || !username.trim() || isButtonDisabled
-              }
-            >
-              <LogIn className="w-4 h-4 mr-2" />
-              {isConnecting ? "Joining Room..." : "Join Room"}
-            </Button>
-          </div>
+              <div className="space-y-2">
+                <Label htmlFor="roomCode" className="text-gray-700 font-medium">
+                  Room Code <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  id="roomCode"
+                  type="text"
+                  placeholder="Enter 6-character room code"
+                  value={roomCode}
+                  onChange={(e) =>
+                    setRoomCode(e.target.value.toUpperCase().slice(0, 6))
+                  }
+                  className="w-full font-mono text-center text-lg tracking-wider"
+                  disabled={isConnecting || isCreating}
+                  maxLength={6}
+                />
+                {roomCode.length > 0 && roomCode.length !== 6 && (
+                  <p className="text-sm text-red-500 mt-1">
+                    Room code must be 6 characters
+                  </p>
+                )}
+              </div>
+
+              <Button
+                onClick={handleJoinRoom}
+                className={`w-full ${
+                  isButtonDisabled
+                    ? "bg-gray-400 cursor-not-allowed"
+                    : "bg-blue-500 hover:bg-blue-600"
+                } text-white`}
+                disabled={
+                  !roomCode.trim() ||
+                  !username.trim() ||
+                  roomCode.length !== 6 ||
+                  isButtonDisabled
+                }
+              >
+                <LogIn className="w-4 h-4 mr-2" />
+                {isConnecting ? "Joining Room..." : "Join Room"}
+              </Button>
+            </div>
+          )}
 
           {error && (
             <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-center">
