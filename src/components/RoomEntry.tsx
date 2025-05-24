@@ -23,34 +23,65 @@ const RoomEntry: React.FC<RoomEntryProps> = ({
   const [username, setUsername] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [connectionStatus, setConnectionStatus] = useState<string | null>(null);
 
-  const generateRoomCode = () => {
-    const code = Math.random().toString(36).substring(2, 8).toUpperCase();
-    setRoomCode(code);
-    setIsCreating(true);
-    setError(null);
+  const generateRoomCode = async () => {
+    try {
+      setError(null);
+      setConnectionStatus("Creating room...");
 
-    // Automatically join the room after creating it
-    setTimeout(() => {
-      onJoinRoom(code, username.trim());
-    }, 500);
+      if (!username.trim()) {
+        setError("Please enter your name");
+        setConnectionStatus(null);
+        return;
+      }
+
+      const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+      setRoomCode(code);
+      setIsCreating(true);
+
+      // Wait a moment before joining to ensure socket is ready
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      setConnectionStatus("Connecting to room...");
+      await onJoinRoom(code, username.trim());
+    } catch (error) {
+      console.error("Error creating room:", error);
+      setError(
+        error instanceof Error ? error.message : "Failed to create room"
+      );
+      setIsCreating(false);
+      setConnectionStatus(null);
+    }
   };
 
-  const handleJoinRoom = () => {
-    setError(null);
-    if (!username.trim()) {
-      setError("Please enter your name");
-      return;
+  const handleJoinRoom = async () => {
+    try {
+      setError(null);
+      setConnectionStatus("Connecting to room...");
+
+      if (!username.trim()) {
+        setError("Please enter your name");
+        setConnectionStatus(null);
+        return;
+      }
+      if (!roomCode.trim()) {
+        setError("Please enter a room code");
+        setConnectionStatus(null);
+        return;
+      }
+      if (roomCode.trim().length !== 6) {
+        setError("Room code must be 6 characters");
+        setConnectionStatus(null);
+        return;
+      }
+
+      await onJoinRoom(roomCode.trim().toUpperCase(), username.trim());
+    } catch (error) {
+      console.error("Error joining room:", error);
+      setError(error instanceof Error ? error.message : "Failed to join room");
+      setConnectionStatus(null);
     }
-    if (!roomCode.trim()) {
-      setError("Please enter a room code");
-      return;
-    }
-    if (roomCode.trim().length !== 6) {
-      setError("Room code must be 6 characters");
-      return;
-    }
-    onJoinRoom(roomCode.trim().toUpperCase(), username.trim());
   };
 
   return (
@@ -146,29 +177,42 @@ const RoomEntry: React.FC<RoomEntryProps> = ({
           {error && (
             <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-center">
               <p className="text-sm text-red-800 font-medium">{error}</p>
+              <button
+                onClick={() => {
+                  setError(null);
+                  setConnectionStatus(null);
+                  setIsCreating(false);
+                }}
+                className="text-xs text-red-600 hover:text-red-800 mt-2 underline"
+              >
+                Try Again
+              </button>
             </div>
           )}
 
-          {isCreating && roomCode && (
+          {connectionStatus && !error && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-center">
+              <p className="text-sm text-blue-800 font-medium">
+                {connectionStatus}
+              </p>
+              {isCreating && roomCode && (
+                <p className="text-xs text-blue-600 mt-1">
+                  Room code:{" "}
+                  <span className="font-mono font-bold">{roomCode}</span>
+                </p>
+              )}
+            </div>
+          )}
+
+          {isCreating && roomCode && !error && !connectionStatus && (
             <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-center">
               <Users className="w-8 h-8 text-green-600 mx-auto mb-2" />
               <p className="text-sm text-green-800 font-medium">
                 Room Created!
               </p>
               <p className="text-xs text-green-600 mt-1">
-                Joining room{" "}
+                Room code:{" "}
                 <span className="font-mono font-bold">{roomCode}</span>
-              </p>
-            </div>
-          )}
-
-          {isConnecting && !isCreating && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-center">
-              <p className="text-sm text-blue-800 font-medium">
-                Connecting to room...
-              </p>
-              <p className="text-xs text-blue-600 mt-1">
-                Please wait while we connect you
               </p>
             </div>
           )}

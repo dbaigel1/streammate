@@ -21,16 +21,20 @@ const Index: React.FC = () => {
   const currentShow = mockShows[currentShowIndex];
 
   useEffect(() => {
+    let mounted = true;
+
     // Set up socket event listeners
     socketService.onRoomJoined((room) => {
       console.log("Room joined:", room);
-      setRoom(room);
-      setIsConnecting(false);
+      if (mounted) {
+        setRoom(room);
+        setIsConnecting(false);
+      }
     });
 
     socketService.onUserJoined((user) => {
       console.log("User joined:", user);
-      if (room) {
+      if (mounted && room) {
         setRoom((prev) =>
           prev
             ? {
@@ -44,7 +48,7 @@ const Index: React.FC = () => {
 
     socketService.onUserLeft((userId) => {
       console.log("User left:", userId);
-      if (room) {
+      if (mounted && room) {
         setRoom((prev) =>
           prev
             ? {
@@ -58,7 +62,7 @@ const Index: React.FC = () => {
 
     socketService.onSwipeUpdate((swipe) => {
       console.log("Swipe update:", swipe);
-      if (room) {
+      if (mounted && room) {
         setRoom((prev) =>
           prev
             ? {
@@ -79,23 +83,29 @@ const Index: React.FC = () => {
 
     socketService.onMatchFound((showId) => {
       console.log("Match found for show:", showId);
-      const matchedShow = mockShows.find((show) => show.id === showId);
-      if (matchedShow) {
-        setMatchedShow(matchedShow);
+      if (mounted) {
+        const matchedShow = mockShows.find((show) => show.id === showId);
+        if (matchedShow) {
+          setMatchedShow(matchedShow);
+        }
       }
     });
 
     socketService.onError((message) => {
       console.error("Socket error:", message);
-      toast({
-        title: "Error",
-        description: message,
-        variant: "destructive",
-      });
+      if (mounted) {
+        setIsConnecting(false);
+        toast({
+          title: "Connection Error",
+          description: message,
+          variant: "destructive",
+        });
+      }
     });
 
     // Cleanup on unmount
     return () => {
+      mounted = false;
       socketService.disconnect();
       socketService.offRoomJoined(() => {});
       socketService.offUserJoined(() => {});
@@ -109,8 +119,13 @@ const Index: React.FC = () => {
   const handleJoinRoom = async (roomCode: string, username: string) => {
     try {
       setIsConnecting(true);
+      console.log("Joining room:", { roomCode, username });
+
       await socketService.joinRoom(roomCode, username);
       setCurrentUser(username);
+
+      // If we get here, the room was joined successfully
+      console.log("Room joined successfully");
     } catch (error) {
       console.error("Error joining room:", error);
       setIsConnecting(false);
@@ -122,6 +137,7 @@ const Index: React.FC = () => {
             : "Failed to join room. Please try again.",
         variant: "destructive",
       });
+      throw error; // Re-throw to let RoomEntry handle the error
     }
   };
 
@@ -160,7 +176,9 @@ const Index: React.FC = () => {
   // Show room entry if not in a room
   if (!room) {
     console.log("Showing room entry screen");
-    return <RoomEntry onJoinRoom={handleJoinRoom} />;
+    return (
+      <RoomEntry onJoinRoom={handleJoinRoom} isConnecting={isConnecting} />
+    );
   }
 
   // Show match screen if there's a match

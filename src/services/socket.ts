@@ -10,11 +10,12 @@ class SocketService {
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
   private connectionPromise: Promise<void> | null = null;
+  private isConnecting = false;
 
   constructor() {
     const socketUrl =
       import.meta.env.VITE_SOCKET_URL || "http://localhost:3000";
-    console.log("Connecting to socket server at:", socketUrl);
+    console.log("Initializing socket service with URL:", socketUrl);
 
     this.socket = io(socketUrl, {
       transports: ["websocket", "polling"],
@@ -24,6 +25,7 @@ class SocketService {
       reconnectionDelayMax: 5000,
       timeout: 20000,
       autoConnect: false,
+      forceNew: true,
     });
 
     this.setupEventListeners();
@@ -31,22 +33,30 @@ class SocketService {
 
   private setupEventListeners() {
     this.socket.on("connect", () => {
-      console.log("Socket connected successfully");
+      console.log("Socket connected successfully with ID:", this.socket.id);
       this.reconnectAttempts = 0;
+      this.isConnecting = false;
     });
 
     this.socket.on("connect_error", (error) => {
       console.error("Connection error:", error.message);
       this.reconnectAttempts++;
-      if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-        console.error("Max reconnection attempts reached");
+      this.isConnecting = false;
+
+      // Try polling if websocket fails
+      if (this.socket.io.opts.transports?.[0] === "websocket") {
+        console.log("Falling back to polling transport");
+        this.socket.io.opts.transports = ["polling", "websocket"];
       }
     });
 
     this.socket.on("disconnect", (reason) => {
       console.log("Socket disconnected:", reason);
+      this.isConnecting = false;
+
       if (reason === "io server disconnect") {
         // Server initiated disconnect, try to reconnect
+        console.log("Server initiated disconnect, attempting to reconnect...");
         this.socket.connect();
       }
     });
@@ -78,26 +88,40 @@ class SocketService {
 
   private ensureConnected(): Promise<void> {
     if (this.socket.connected) {
+      console.log("Socket already connected");
       return Promise.resolve();
     }
 
-    if (this.connectionPromise) {
-      return this.connectionPromise;
+    if (this.isConnecting) {
+      console.log("Socket connection in progress, waiting...");
+      return (
+        this.connectionPromise ||
+        Promise.reject(new Error("Connection in progress"))
+      );
     }
+
+    this.isConnecting = true;
+    console.log("Initiating socket connection...");
 
     this.connectionPromise = new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
-        reject(new Error("Connection timeout"));
-      }, 10000);
+        this.isConnecting = false;
+        this.connectionPromise = null;
+        reject(new Error("Connection timeout - please try again"));
+      }, 15000);
 
       this.socket.once("connect", () => {
+        console.log("Socket connected in ensureConnected");
         clearTimeout(timeout);
+        this.isConnecting = false;
         this.connectionPromise = null;
         resolve();
       });
 
       this.socket.once("connect_error", (error) => {
+        console.error("Connection error in ensureConnected:", error);
         clearTimeout(timeout);
+        this.isConnecting = false;
         this.connectionPromise = null;
         reject(error);
       });
@@ -110,6 +134,8 @@ class SocketService {
 
   async joinRoom(roomCode: string, username: string): Promise<void> {
     try {
+      console.log("Attempting to join room:", { roomCode, username });
+
       // Ensure we're connected before attempting to join
       await this.ensureConnected();
 
@@ -126,9 +152,10 @@ class SocketService {
 
       return new Promise((resolve, reject) => {
         const timeout = setTimeout(() => {
-          reject(new Error("Join room timeout"));
-        }, 10000);
+          reject(new Error("Join room timeout - please try again"));
+        }, 15000);
 
+        console.log("Emitting joinRoom event...");
         this.socket.emit(
           "joinRoom",
           {
@@ -138,8 +165,10 @@ class SocketService {
           (error) => {
             clearTimeout(timeout);
             if (error) {
+              console.error("Error in joinRoom callback:", error);
               reject(new Error(error));
             } else {
+              console.log("Successfully joined room");
               resolve();
             }
           }
