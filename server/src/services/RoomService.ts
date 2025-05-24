@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from "uuid";
 export class RoomService {
   private rooms: Map<string, Room> = new Map();
   private userToRoom: Map<string, string> = new Map(); // userId -> roomCode
+  private socketToUser: Map<string, string> = new Map(); // socketId -> userId
 
   createRoom(username: string, socketId: string): { room: Room; user: User } {
     const roomCode = this.generateRoomCode();
@@ -24,6 +25,7 @@ export class RoomService {
 
     this.rooms.set(roomCode, room);
     this.userToRoom.set(userId, roomCode);
+    this.socketToUser.set(socketId, userId);
 
     return { room, user };
   }
@@ -36,6 +38,18 @@ export class RoomService {
     const room = this.rooms.get(roomCode);
     if (!room) {
       return null;
+    }
+
+    // Check if this socket is reconnecting
+    const existingUserId = this.socketToUser.get(socketId);
+    if (existingUserId) {
+      const existingUser = room.users.find((u) => u.id === existingUserId);
+      if (existingUser) {
+        // Update socket ID for existing user
+        existingUser.socketId = socketId;
+        console.log("User reconnected:", { userId: existingUserId, socketId });
+        return { room, user: existingUser };
+      }
     }
 
     // Check if username is already taken in the room
@@ -52,6 +66,7 @@ export class RoomService {
 
     room.users.push(user);
     this.userToRoom.set(userId, roomCode);
+    this.socketToUser.set(socketId, userId);
 
     return { room, user };
   }
@@ -73,6 +88,10 @@ export class RoomService {
     }
 
     const user = room.users[userIndex];
+
+    // Remove socket mapping
+    this.socketToUser.delete(user.socketId);
+
     room.users.splice(userIndex, 1);
     this.userToRoom.delete(userId);
 

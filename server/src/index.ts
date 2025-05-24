@@ -87,8 +87,35 @@ io.on("connection", (socket) => {
       let result;
 
       // Try to join existing room first
-      result = roomService.joinRoom(data.roomCode, data.username, socket.id);
-      console.log("Join room result:", result ? "Success" : "Room not found");
+      try {
+        result = roomService.joinRoom(data.roomCode, data.username, socket.id);
+        console.log("Join room result:", result ? "Success" : "Room not found");
+      } catch (error) {
+        // If username is taken, check if it's a reconnection
+        if (
+          error instanceof Error &&
+          error.message === "Username is already taken in this room"
+        ) {
+          const room = roomService.getRoom(data.roomCode);
+          if (room) {
+            const existingUser = room.users.find(
+              (u) => u.username === data.username
+            );
+            if (existingUser) {
+              // This is a reconnection attempt, update the socket ID
+              existingUser.socketId = socket.id;
+              result = { room, user: existingUser };
+              console.log(
+                "User reconnected with existing username:",
+                data.username
+              );
+            }
+          }
+        }
+        if (!result) {
+          throw error;
+        }
+      }
 
       // If room doesn't exist, create a new one
       if (!result) {
@@ -108,6 +135,11 @@ io.on("connection", (socket) => {
         userId: user.id,
         username: user.username,
         totalUsers: room.users.length,
+        isReconnection:
+          user.socketId === socket.id &&
+          room.users.some(
+            (u) => u.username === user.username && u.id !== user.id
+          ),
       });
 
       // Store user data in socket
@@ -124,9 +156,15 @@ io.on("connection", (socket) => {
       socket.emit("roomJoined", room);
       console.log("Emitted roomJoined event to:", socket.id);
 
-      // Notify other users in the room
-      socket.to(room.code).emit("userJoined", user);
-      console.log("Emitted userJoined event to room:", room.code);
+      // Only notify other users if this is a new user (not a reconnection)
+      if (
+        !room.users.some(
+          (u) => u.username === user.username && u.id !== user.id
+        )
+      ) {
+        socket.to(room.code).emit("userJoined", user);
+        console.log("Emitted userJoined event to room:", room.code);
+      }
 
       callback();
     } catch (error) {
