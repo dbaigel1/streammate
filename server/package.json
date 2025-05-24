@@ -1,0 +1,33 @@
+{
+  "name": "streammate-server",
+  "version": "1.0.0",
+  "description": "Backend server for Streammate - a show matching application",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "cross-env NODE_ENV=development node --loader ts-node/esm src/index.ts",
+    "build": "tsc",
+    "start": "cross-env NODE_ENV=production node dist/index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@types/cors": "^2.8.18",
+    "@types/express": "^5.0.2",
+    "@types/node": "^22.15.21",
+    "cors": "^2.8.5",
+    "cross-env": "^7.0.3",
+    "dotenv": "^16.5.0",
+    "express": "^5.1.0",
+    "socket.io": "^4.8.1",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.3",
+    "uuid": "^11.1.0"
+  },
+  "devDependencies": {
+    "@types/socket.io": "^3.0.1",
+    "@types/uuid": "^10.0.0"
+  }
+}

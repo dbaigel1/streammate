@@ -1,117 +1,168 @@
-
-import React, { useState } from 'react';
-import SwipeCard from '@/components/SwipeCard';
-import MatchScreen from '@/components/MatchScreen';
-import UserIndicator from '@/components/UserIndicator';
-import RoomEntry from '@/components/RoomEntry';
-import RoomStatus from '@/components/RoomStatus';
-import { Show, SwipeData, Room } from '@/types/show';
-import { mockShows } from '@/data/mockShows';
+import React, { useState, useEffect } from "react";
+import SwipeCard from "@/components/SwipeCard";
+import MatchScreen from "@/components/MatchScreen";
+import UserIndicator from "@/components/UserIndicator";
+import RoomEntry from "@/components/RoomEntry";
+import RoomStatus from "@/components/RoomStatus";
+import { Show, SwipeData, Room } from "@/types/show";
+import { mockShows } from "@/data/mockShows";
+import { socketService } from "@/services/socket";
+import { useToast } from "@/components/ui/use-toast";
+import { User } from "../../server/src/types/index.js";
 
 const Index: React.FC = () => {
   const [currentShowIndex, setCurrentShowIndex] = useState(0);
   const [room, setRoom] = useState<Room | null>(null);
-  const [currentUser, setCurrentUser] = useState<string>('');
+  const [currentUser, setCurrentUser] = useState<string>("");
   const [matchedShow, setMatchedShow] = useState<Show | null>(null);
+  const { toast } = useToast();
 
   const currentShow = mockShows[currentShowIndex];
 
-  const handleJoinRoom = (roomCode: string, username: string) => {
-    console.log(`Creating/joining room ${roomCode} with user ${username}`);
-    // In a real app, this would connect to a backend
-    // For now, we'll simulate room creation/joining
-    const newRoom: Room = {
-      code: roomCode,
-      users: [username], // In real app, this would be fetched from server
-      swipes: []
+  useEffect(() => {
+    // Connect to socket server
+    socketService.connect();
+
+    // Set up socket event listeners
+    socketService.onRoomJoined((room) => {
+      console.log("Room joined:", room);
+      setRoom(room);
+    });
+
+    socketService.onUserJoined((user) => {
+      console.log("User joined:", user);
+      if (room) {
+        setRoom((prev) =>
+          prev
+            ? {
+                ...prev,
+                users: [...prev.users, user],
+              }
+            : null
+        );
+      }
+    });
+
+    socketService.onUserLeft((userId) => {
+      console.log("User left:", userId);
+      if (room) {
+        setRoom((prev) =>
+          prev
+            ? {
+                ...prev,
+                users: prev.users.filter((u) => u.id !== userId),
+              }
+            : null
+        );
+      }
+    });
+
+    socketService.onSwipeUpdate((swipe) => {
+      console.log("Swipe update:", swipe);
+      if (room) {
+        setRoom((prev) =>
+          prev
+            ? {
+                ...prev,
+                swipes: [
+                  ...prev.swipes,
+                  {
+                    showId: swipe.showId,
+                    direction: swipe.direction,
+                    user: swipe.userId,
+                  },
+                ],
+              }
+            : null
+        );
+      }
+    });
+
+    socketService.onMatchFound((showId) => {
+      console.log("Match found for show:", showId);
+      const matchedShow = mockShows.find((show) => show.id === showId);
+      if (matchedShow) {
+        setMatchedShow(matchedShow);
+      }
+    });
+
+    socketService.onError((message) => {
+      console.error("Socket error:", message);
+      toast({
+        title: "Error",
+        description: message,
+        variant: "destructive",
+      });
+    });
+
+    // Cleanup on unmount
+    return () => {
+      socketService.disconnect();
+      socketService.offRoomJoined(() => {});
+      socketService.offUserJoined(() => {});
+      socketService.offUserLeft(() => {});
+      socketService.offSwipeUpdate(() => {});
+      socketService.offMatchFound(() => {});
+      socketService.offError(() => {});
     };
-    
-    setRoom(newRoom);
-    setCurrentUser(username);
-    console.log('Room created:', newRoom);
-    console.log('Current user set:', username);
+  }, [room, toast]);
+
+  const handleJoinRoom = async (roomCode: string, username: string) => {
+    try {
+      await socketService.joinRoom(roomCode, username);
+      setCurrentUser(username);
+    } catch (error) {
+      console.error("Error joining room:", error);
+      toast({
+        title: "Error",
+        description:
+          error instanceof Error ? error.message : "Failed to join room",
+        variant: "destructive",
+      });
+    }
   };
 
-  const handleSwipe = (direction: 'left' | 'right') => {
+  const handleSwipe = (direction: "left" | "right") => {
     if (!currentShow || !room) {
-      console.log('Cannot swipe: missing show or room', { currentShow, room });
+      console.log("Cannot swipe: missing show or room", { currentShow, room });
       return;
     }
 
-    console.log(`Processing swipe: ${direction} by ${currentUser} on ${currentShow.title}`);
-
-    const swipeData: SwipeData = {
-      showId: currentShow.id,
-      direction,
-      user: currentUser
-    };
-
-    const newSwipes = [...room.swipes, swipeData];
-    const updatedRoom = {
-      ...room,
-      swipes: newSwipes
-    };
-    
-    setRoom(updatedRoom);
-    console.log('Updated swipes:', newSwipes);
-
-    // Check if all users in the room have swiped right on this show
-    if (direction === 'right') {
-      const rightSwipesForShow = newSwipes.filter(
-        swipe => swipe.showId === currentShow.id && swipe.direction === 'right'
-      );
-      
-      const usersWhoSwipedRight = new Set(
-        rightSwipesForShow.map(swipe => swipe.user)
-      );
-
-      console.log(`Users who swiped right on ${currentShow.title}:`, Array.from(usersWhoSwipedRight));
-      console.log(`Total users in room: ${room.users.length}`);
-
-      // If all users in the room have swiped right on this show, it's a match!
-      if (usersWhoSwipedRight.size === room.users.length) {
-        console.log('MATCH FOUND!', currentShow.title);
-        setMatchedShow(currentShow);
-        return;
-      }
-    }
-
-    // Check if current user has swiped on this show, if so move to next
-    const currentUserSwipesForShow = newSwipes.filter(
-      swipe => swipe.showId === currentShow.id && swipe.user === currentUser
+    console.log(
+      `Processing swipe: ${direction} by ${currentUser} on ${currentShow.title}`
     );
+    socketService.swipe(currentShow.id, direction);
 
-    if (currentUserSwipesForShow.length > 0) {
-      console.log('Moving to next show');
-      setCurrentShowIndex(prev => prev + 1);
-    }
+    // Move to next show after swipe
+    setCurrentShowIndex((prev) => prev + 1);
   };
 
   const resetApp = () => {
-    console.log('Resetting app');
+    console.log("Resetting app");
     setCurrentShowIndex(0);
     setRoom(null);
-    setCurrentUser('');
+    setCurrentUser("");
     setMatchedShow(null);
   };
 
   const leaveRoom = () => {
-    console.log('Leaving room');
+    console.log("Leaving room");
+    socketService.leaveRoom();
     setRoom(null);
-    setCurrentUser('');
+    setCurrentUser("");
     setMatchedShow(null);
     setCurrentShowIndex(0);
   };
 
   // Show room entry if not in a room
   if (!room) {
-    console.log('Showing room entry screen');
+    console.log("Showing room entry screen");
     return <RoomEntry onJoinRoom={handleJoinRoom} />;
   }
 
   // Show match screen if there's a match
   if (matchedShow) {
-    console.log('Showing match screen for:', matchedShow.title);
+    console.log("Showing match screen for:", matchedShow.title);
     return <MatchScreen show={matchedShow} onReset={resetApp} />;
   }
 
@@ -121,7 +172,9 @@ const Index: React.FC = () => {
       <div className="min-h-screen bg-gradient-to-br from-purple-600 via-pink-600 to-blue-600 flex items-center justify-center p-4">
         <div className="text-center text-white">
           <h2 className="text-3xl font-bold mb-4">No more shows!</h2>
-          <p className="text-xl mb-6">You've gone through all available shows without finding a match.</p>
+          <p className="text-xl mb-6">
+            You've gone through all available shows without finding a match.
+          </p>
           <div className="space-y-3">
             <button
               onClick={resetApp}
@@ -141,27 +194,36 @@ const Index: React.FC = () => {
     );
   }
 
-  console.log('Showing swipe screen for room:', room.code, 'user:', currentUser);
+  console.log(
+    "Showing swipe screen for room:",
+    room.code,
+    "user:",
+    currentUser
+  );
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-600 via-pink-600 to-blue-600 flex flex-col items-center justify-center p-4">
       <div className="w-full max-w-md">
-        <RoomStatus roomCode={room.code} users={room.users} currentUser={currentUser} />
-        
-        <UserIndicator 
-          currentUser={currentUser} 
+        <RoomStatus
+          roomCode={room.code}
+          users={room.users}
+          currentUser={currentUser}
+        />
+
+        <UserIndicator
+          currentUser={currentUser}
           allSwipes={room.swipes}
           roomUsers={room.users}
         />
-        
+
         <div className="mt-8">
-          <SwipeCard 
-            show={currentShow} 
+          <SwipeCard
+            show={currentShow}
             onSwipe={handleSwipe}
             currentUser={currentUser}
           />
         </div>
-        
+
         <div className="mt-6 text-center text-white/80">
           <p className="text-sm">
             Show {currentShowIndex + 1} of {mockShows.length}

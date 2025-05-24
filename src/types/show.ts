@@ -1,9 +1,10 @@
+import { User } from "../../server/src/types/index.js";
 
 export interface Show {
   id: string;
   title: string;
   year: number;
-  type: 'movie' | 'tv';
+  type: "movie" | "tv";
   genre: string[];
   rating: number;
   description: string;
@@ -12,12 +13,12 @@ export interface Show {
 
 export interface SwipeData {
   showId: string;
-  direction: 'left' | 'right';
+  direction: "left" | "right";
   user: string;
 }
 
 export interface Room {
   code: string;
-  users: string[];
+  users: User[];
   swipes: SwipeData[];
 }
