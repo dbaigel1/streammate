@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,28 @@ export default function RoomEntry({ isConnecting }: RoomEntryProps) {
   const [error, setError] = useState<string | null>(null);
   const [isJoining, setIsJoining] = useState(false);
   const [activeTab, setActiveTab] = useState<"create" | "join">("create");
+
+  useEffect(() => {
+    // Set up socket event listener for roomJoined
+    const socket = socketService.getSocket();
+
+    const handleRoomJoined = (data: { room: Room; user: User }) => {
+      console.log("Room joined event received:", data);
+      navigate("/swipe", {
+        state: {
+          room: data.room,
+          user: data.user,
+          isHost: false,
+        },
+      });
+    };
+
+    socket?.on("roomJoined", handleRoomJoined);
+
+    return () => {
+      socket?.off("roomJoined", handleRoomJoined);
+    };
+  }, [navigate]);
 
   const handleCreateRoom = async () => {
     if (!username.trim()) {
@@ -101,11 +123,10 @@ export default function RoomEntry({ isConnecting }: RoomEntryProps) {
         console.log("Join room response:", error);
         if (error) {
           setError(error);
-        } else {
-          // The roomJoined event will be handled by the socket listener in the parent component
-          // which will trigger navigation
+          setIsJoining(false);
         }
-        setIsJoining(false);
+        // Note: We don't set isJoining to false here because we're waiting for the roomJoined event
+        // which will trigger navigation
       });
     } catch (err) {
       console.error("Error joining room:", err);
