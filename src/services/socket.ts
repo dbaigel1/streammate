@@ -2,6 +2,8 @@ import { io, Socket } from "socket.io-client";
 import {
   ClientToServerEvents,
   ServerToClientEvents,
+  Room,
+  User,
 } from "../../server/src/types/index.js";
 
 class SocketService {
@@ -14,7 +16,7 @@ class SocketService {
   private lastRoomCode: string | null = null;
   private lastUsername: string | null = null;
 
-  constructor() {
+  private constructor() {
     const socketUrl =
       import.meta.env.VITE_SOCKET_URL || "http://localhost:3000";
     console.log("Initializing socket service with URL:", socketUrl);
@@ -31,6 +33,13 @@ class SocketService {
     });
 
     this.setupEventListeners();
+  }
+
+  public static getInstance(): SocketService {
+    if (!SocketService.instance) {
+      SocketService.instance = new SocketService();
+    }
+    return SocketService.instance;
   }
 
   private setupEventListeners() {
@@ -142,7 +151,19 @@ class SocketService {
     return this.connectionPromise;
   }
 
-  async joinRoom(roomCode: string, username: string): Promise<void> {
+  public connect() {
+    this.socket.connect();
+  }
+
+  public disconnect() {
+    this.socket.disconnect();
+  }
+
+  public getSocket(): Socket {
+    return this.socket;
+  }
+
+  public async joinRoom(roomCode: string, username: string): Promise<void> {
     try {
       console.log("Attempting to join room:", { roomCode, username });
 
@@ -197,21 +218,14 @@ class SocketService {
     }
   }
 
-  disconnect() {
-    if (this.socket) {
-      this.socket.disconnect();
-      this.socket = null;
-    }
-  }
-
-  leaveRoom() {
+  public leaveRoom() {
     console.log("Leaving room");
     this.lastRoomCode = null;
     this.lastUsername = null;
     this.socket.emit("leaveRoom");
   }
 
-  swipe(showId: string, direction: "left" | "right") {
+  public swipe(showId: string, direction: "left" | "right") {
     if (this.socket) {
       this.socket.emit("swipe", { showId, direction });
     }
@@ -266,4 +280,5 @@ class SocketService {
   }
 }
 
-export const socketService = new SocketService();
+export const socketService = SocketService.getInstance();
+export const socket = socketService.getSocket();

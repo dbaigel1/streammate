@@ -6,332 +6,175 @@ import RoomEntry from "@/components/RoomEntry";
 import RoomStatus from "@/components/RoomStatus";
 import { Show, SwipeData, Room } from "@/types/show";
 import { mockShows } from "@/data/mockShows";
-import { socketService } from "@/services/socket";
+import { socket } from "../services/socket";
 import { useToast } from "@/components/ui/use-toast";
 import { User } from "../../server/src/types/index.js";
+import { useNavigate } from "react-router-dom";
+import { tmdbService } from "../services/tmdb";
+import ShowCard from "../components/ShowCard";
+import { Button } from "@/components/ui/button";
+import { Loader2 } from "lucide-react";
 
-const Index: React.FC = () => {
-  const [room, setRoom] = useState<Room | null>(() => {
-    // Try to restore room state from localStorage
-    const savedRoom = localStorage.getItem("room");
-    const savedUser = localStorage.getItem("currentUser");
-    if (savedRoom && savedUser) {
-      try {
-        const parsedRoom = JSON.parse(savedRoom);
-        // Validate that the room data is still valid
-        if (parsedRoom && parsedRoom.code && Array.isArray(parsedRoom.users)) {
-          console.log("Restoring room state from localStorage:", parsedRoom);
-          return parsedRoom;
-        }
-      } catch (e) {
-        console.error("Error parsing saved room:", e);
-      }
-    }
-    return null;
-  });
-
-  const [currentUser, setCurrentUser] = useState(() => {
-    return localStorage.getItem("currentUser") || "";
-  });
-
-  const [currentShowIndex, setCurrentShowIndex] = useState(0);
-  const [matchedShow, setMatchedShow] = useState<Show | null>(null);
+export default function Index() {
+  const navigate = useNavigate();
+  const [room, setRoom] = useState<Room | null>(null);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [shows, setShows] = useState<Show[]>([]);
+  const [currentShowIndex, setCurrentShowIndex] = useState(0);
+  const [isSwiping, setIsSwiping] = useState(false);
+  const [isLoadingShows, setIsLoadingShows] = useState(false);
   const { toast } = useToast();
 
-  const currentShow = mockShows[currentShowIndex];
-
-  // Save room state to localStorage whenever it changes
   useEffect(() => {
-    if (room) {
-      localStorage.setItem("room", JSON.stringify(room));
-      localStorage.setItem("currentUser", currentUser);
-    } else {
-      localStorage.removeItem("room");
-      localStorage.removeItem("currentUser");
-    }
-  }, [room, currentUser]);
-
-  // Attempt to rejoin room on mount if we have saved state
-  useEffect(() => {
-    let mounted = true;
-
-    const attemptRejoin = async () => {
-      if (room && currentUser && !isConnecting) {
-        console.log("Attempting to rejoin room:", room.code);
-        try {
-          setIsConnecting(true);
-          await socketService.joinRoom(room.code, currentUser);
-          console.log("Successfully rejoined room");
-        } catch (error) {
-          console.error("Failed to rejoin room:", error);
-          // Clear saved state if we can't rejoin
-          setRoom(null);
-          setCurrentUser("");
-          localStorage.removeItem("room");
-          localStorage.removeItem("currentUser");
-          toast({
-            title: "Connection Error",
-            description:
-              "Could not rejoin room. Please create or join a new room.",
-            variant: "destructive",
-          });
-        } finally {
-          if (mounted) {
-            setIsConnecting(false);
-          }
-        }
-      }
-    };
-
-    attemptRejoin();
-
-    // Set up socket event listeners
-    socketService.onRoomJoined((newRoom) => {
-      console.log("Room joined:", newRoom);
-      if (mounted) {
-        setRoom(newRoom);
-        setIsConnecting(false);
-      }
+    // Socket event listeners
+    socket.on("connect", () => {
+      console.log("Connected to server");
+      setIsConnecting(false);
     });
 
-    socketService.onUserJoined((user) => {
+    socket.on("disconnect", () => {
+      console.log("Disconnected from server");
+      setIsConnecting(true);
+    });
+
+    socket.on("roomJoined", (roomData: Room, user: User) => {
+      console.log("Joined room:", roomData);
+      setRoom(roomData);
+      setCurrentUser(user);
+      setIsConnecting(false);
+      // Load shows when joining a room
+      loadShows();
+    });
+
+    socket.on("userJoined", (user: User) => {
       console.log("User joined:", user);
-      if (mounted && room) {
-        setRoom((prev) =>
-          prev
-            ? {
-                ...prev,
-                users: [...prev.users, user],
-              }
-            : null
-        );
-      }
+      setRoom((prev) => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          users: [...prev.users, user],
+        };
+      });
     });
 
-    socketService.onUserLeft((userId) => {
+    socket.on("userLeft", (userId: string) => {
       console.log("User left:", userId);
-      if (mounted && room) {
-        setRoom((prev) =>
-          prev
-            ? {
-                ...prev,
-                users: prev.users.filter((u) => u.id !== userId),
-              }
-            : null
-        );
-      }
+      setRoom((prev) => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          users: prev.users.filter((u) => u.id !== userId),
+        };
+      });
     });
 
-    socketService.onSwipeUpdate((swipe) => {
-      console.log("Swipe update:", swipe);
-      if (mounted && room) {
-        setRoom((prev) =>
-          prev
-            ? {
-                ...prev,
-                swipes: [
-                  ...prev.swipes,
-                  {
-                    showId: swipe.showId,
-                    direction: swipe.direction,
-                    user: swipe.userId,
-                  },
-                ],
-              }
-            : null
-        );
-      }
-    });
-
-    socketService.onMatchFound((showId) => {
-      console.log("Match found for show:", showId);
-      if (mounted) {
-        const matchedShow = mockShows.find((show) => show.id === showId);
-        if (matchedShow) {
-          setMatchedShow(matchedShow);
-        }
-      }
-    });
-
-    socketService.onError((message) => {
-      console.error("Socket error:", message);
-      if (mounted) {
-        setIsConnecting(false);
-        toast({
-          title: "Connection Error",
-          description: message,
-          variant: "destructive",
-        });
-      }
+    socket.on("swipeUpdate", (swipeData: SwipeData) => {
+      console.log("Swipe update:", swipeData);
+      setRoom((prev) => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          swipes: [...prev.swipes, swipeData],
+        };
+      });
     });
 
     return () => {
-      console.log("Index component unmounting, cleaning up");
-      mounted = false;
-      setIsConnecting(false);
-      socketService.disconnect();
-      socketService.offRoomJoined(() => {});
-      socketService.offUserJoined(() => {});
-      socketService.offUserLeft(() => {});
-      socketService.offSwipeUpdate(() => {});
-      socketService.offMatchFound(() => {});
-      socketService.offError(() => {});
+      socket.off("connect");
+      socket.off("disconnect");
+      socket.off("roomJoined");
+      socket.off("userJoined");
+      socket.off("userLeft");
+      socket.off("swipeUpdate");
     };
-  }, [toast]); // Remove room and currentUser from dependencies
+  }, []);
 
-  const handleJoinRoom = async (roomCode: string, username: string) => {
+  const loadShows = async () => {
+    setIsLoadingShows(true);
     try {
-      console.log("Starting room join process:", { roomCode, username });
-      setIsConnecting(true);
-
-      // Reset any existing room state
-      setRoom(null);
-      setCurrentUser("");
-      setMatchedShow(null);
+      const netflixShows = await tmdbService.getNetflixContent();
+      setShows(netflixShows);
       setCurrentShowIndex(0);
-      localStorage.removeItem("room");
-      localStorage.removeItem("currentUser");
-
-      await socketService.joinRoom(roomCode, username);
-      setCurrentUser(username);
-
-      console.log("Room join successful");
     } catch (error) {
-      console.error("Error joining room:", error);
-      setIsConnecting(false);
-      toast({
-        title: "Error",
-        description:
-          error instanceof Error
-            ? error.message
-            : "Failed to join room. Please try again.",
-        variant: "destructive",
-      });
-      throw error;
+      console.error("Error loading shows:", error);
+    } finally {
+      setIsLoadingShows(false);
     }
   };
 
   const handleSwipe = (direction: "left" | "right") => {
-    if (!currentShow || !room) {
-      console.log("Cannot swipe: missing show or room", { currentShow, room });
-      return;
+    if (!room || !currentUser || isSwiping) return;
+
+    setIsSwiping(true);
+    const currentShow = shows[currentShowIndex];
+
+    // Emit swipe event
+    socket.emit("swipe", {
+      roomId: room.id,
+      showId: currentShow.id,
+      direction,
+      userId: currentUser.id,
+      timestamp: new Date(),
+    });
+
+    // Move to next show after a short delay
+    setTimeout(() => {
+      setCurrentShowIndex((prev) => prev + 1);
+      setIsSwiping(false);
+    }, 300);
+  };
+
+  const handleLeaveRoom = () => {
+    if (room && currentUser) {
+      socket.emit("leaveRoom", { roomId: room.id, userId: currentUser.id });
     }
-
-    console.log(
-      `Processing swipe: ${direction} by ${currentUser} on ${currentShow.title}`
-    );
-    socketService.swipe(currentShow.id, direction);
-
-    // Move to next show after swipe
-    setCurrentShowIndex((prev) => prev + 1);
-  };
-
-  const resetApp = () => {
-    console.log("Resetting app");
-    setCurrentShowIndex(0);
     setRoom(null);
-    setCurrentUser("");
-    setMatchedShow(null);
-  };
-
-  const leaveRoom = () => {
-    console.log("Leaving room");
-    socketService.leaveRoom();
-    setRoom(null);
-    setCurrentUser("");
-    setMatchedShow(null);
+    setCurrentUser(null);
+    setShows([]);
     setCurrentShowIndex(0);
-    localStorage.removeItem("room");
-    localStorage.removeItem("currentUser");
   };
 
-  // Show room entry if not in a room
-  if (!room) {
-    console.log("Showing room entry screen");
-    return (
-      <RoomEntry onJoinRoom={handleJoinRoom} isConnecting={isConnecting} />
-    );
+  if (!room || !currentUser) {
+    return <RoomEntry isConnecting={isConnecting} />;
   }
-
-  // Show match screen if there's a match
-  if (matchedShow) {
-    console.log("Showing match screen for:", matchedShow.title);
-    return <MatchScreen show={matchedShow} onReset={resetApp} />;
-  }
-
-  // Show end screen if no more shows
-  if (currentShowIndex >= mockShows.length) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-600 via-pink-600 to-blue-600 flex items-center justify-center p-4">
-        <div className="text-center text-white">
-          <h2 className="text-3xl font-bold mb-4">No more shows!</h2>
-          <p className="text-xl mb-6">
-            You've gone through all available shows without finding a match.
-          </p>
-          <div className="space-y-3">
-            <button
-              onClick={resetApp}
-              className="block w-full bg-white text-purple-600 px-8 py-3 rounded-full font-semibold hover:bg-gray-100 transition-colors"
-            >
-              Start Over
-            </button>
-            <button
-              onClick={leaveRoom}
-              className="block w-full bg-white/20 text-white px-8 py-3 rounded-full font-semibold hover:bg-white/30 transition-colors"
-            >
-              Leave Room
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  console.log(
-    "Showing swipe screen for room:",
-    room.code,
-    "user:",
-    currentUser
-  );
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-600 via-pink-600 to-blue-600 flex flex-col items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        <RoomStatus
-          roomCode={room.code}
-          users={room.users}
-          currentUser={currentUser}
-        />
+    <div className="container mx-auto px-4 py-8 max-w-4xl">
+      <div className="flex justify-between items-center mb-8">
+        <RoomStatus room={room} currentUser={currentUser} />
+        <Button variant="outline" onClick={handleLeaveRoom}>
+          Leave Room
+        </Button>
+      </div>
 
-        <UserIndicator
-          currentUser={currentUser}
-          allSwipes={room.swipes}
-          roomUsers={room.users}
-        />
+      <div className="mb-8">
+        <UserIndicator users={room.users} currentUser={currentUser} />
+      </div>
 
-        <div className="mt-8">
-          <SwipeCard
-            show={currentShow}
+      <div className="relative min-h-[600px]">
+        {isLoadingShows ? (
+          <div className="flex items-center justify-center h-full">
+            <Loader2 className="w-8 h-8 animate-spin" />
+            <span className="ml-2">Loading shows...</span>
+          </div>
+        ) : currentShowIndex < shows.length ? (
+          <ShowCard
+            show={shows[currentShowIndex]}
             onSwipe={handleSwipe}
-            currentUser={currentUser}
+            isSwiping={isSwiping}
           />
-        </div>
-
-        <div className="mt-6 text-center text-white/80">
-          <p className="text-sm">
-            Show {currentShowIndex + 1} of {mockShows.length}
-          </p>
-          <button
-            onClick={leaveRoom}
-            className="text-xs text-white/60 hover:text-white/80 mt-2 underline"
-          >
-            Leave Room
-          </button>
-        </div>
+        ) : (
+          <div className="text-center py-12">
+            <h2 className="text-2xl font-bold mb-4">No more shows!</h2>
+            <p className="text-gray-600 mb-4">
+              You've gone through all available shows. Check back later for more
+              content.
+            </p>
+            <Button onClick={loadShows}>Load More Shows</Button>
+          </div>
+        )}
       </div>
     </div>
   );
-};
-
-export default Index;
+}

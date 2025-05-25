@@ -1,69 +1,59 @@
 import React from "react";
-import { SwipeData } from "@/types/show";
 import { User } from "../../server/src/types/index.js";
+import { Card } from "@/components/ui/card";
 
 interface UserIndicatorProps {
-  currentUser: string;
-  allSwipes: SwipeData[];
-  roomUsers: User[];
+  users: User[];
+  currentUser: User;
 }
 
-const UserIndicator: React.FC<UserIndicatorProps> = ({
+export default function UserIndicator({
+  users,
   currentUser,
-  allSwipes,
-  roomUsers,
-}) => {
-  const getUserSwipeCount = (userId: string) => {
-    return allSwipes.filter((swipe) => swipe.user === userId).length;
-  };
-
-  const getUserColor = (user: User, index: number) => {
+}: UserIndicatorProps) {
+  const getUserColor = (user: User) => {
     const colors = [
       "bg-blue-500",
-      "bg-pink-500",
       "bg-green-500",
-      "bg-orange-500",
+      "bg-yellow-500",
       "bg-purple-500",
+      "bg-pink-500",
+      "bg-indigo-500",
     ];
+    const index = users.findIndex((u) => u.id === user.id);
     return colors[index % colors.length];
   };
 
   return (
-    <div className="flex justify-center gap-3 mb-6 flex-wrap">
-      {roomUsers.map((user, index) => (
-        <div
-          key={user.id}
-          className={`
-            text-center p-3 rounded-xl transition-all duration-300
-            ${
-              user.username === currentUser
-                ? "bg-white/20 scale-105"
-                : "bg-white/10"
-            }
-          `}
-        >
+    <Card className="p-4 bg-white/90 backdrop-blur-sm">
+      <div className="flex flex-wrap gap-2">
+        {users.map((user) => (
           <div
-            className={`
-            w-10 h-10 rounded-full mx-auto mb-2 flex items-center justify-center text-white font-bold text-sm
-            ${
-              user.username === currentUser
-                ? getUserColor(user, index)
-                : "bg-gray-400"
-            }
-          `}
+            key={user.id}
+            className={`flex items-center space-x-2 px-3 py-1.5 rounded-full ${
+              user.id === currentUser.id
+                ? "ring-2 ring-purple-500"
+                : "bg-gray-100"
+            }`}
           >
-            {user.username.charAt(0).toUpperCase()}
+            <div
+              className={`w-6 h-6 rounded-full flex items-center justify-center text-white font-medium ${getUserColor(
+                user
+              )}`}
+            >
+              {user.username[0].toUpperCase()}
+            </div>
+            <span
+              className={`text-sm font-medium ${
+                user.id === currentUser.id ? "text-purple-700" : "text-gray-700"
+              }`}
+            >
+              {user.username}
+              {user.id === currentUser.id && " (You)"}
+            </span>
           </div>
-          <p className="text-white text-xs font-medium truncate max-w-16">
-            {user.username === currentUser ? "You" : user.username}
-          </p>
-          <p className="text-white/70 text-xs">
-            {getUserSwipeCount(user.id)} swipes
-          </p>
-        </div>
-      ))}
-    </div>
+        ))}
+      </div>
+    </Card>
   );
-};
-
-export default UserIndicator;
+}
