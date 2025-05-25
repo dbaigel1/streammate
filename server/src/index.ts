@@ -204,13 +204,14 @@ io.on("connection", (socket) => {
         direction: data.direction,
       });
 
-      const result = roomService.addSwipe(roomCode, {
-        userId: user.id,
-        showId: data.showId,
-        direction: data.direction,
-      });
+      try {
+        const result = roomService.addSwipe(roomCode, {
+          userId: user.id,
+          showId: data.showId,
+          direction: data.direction,
+          timestamp: new Date().toISOString(),
+        });
 
-      if (result) {
         // Broadcast swipe to other users in the room
         socket.to(roomCode).emit("swipeUpdate", {
           userId: user.id,
@@ -218,10 +219,22 @@ io.on("connection", (socket) => {
           direction: data.direction,
         });
 
-        // If it's a match, notify all users
-        if (result.isMatch) {
-          io.to(roomCode).emit("matchFound", data.showId);
+        // If it's a match, notify all users in the room
+        if (result.isMatch && result.matchedUsers) {
+          console.log("Match found!", {
+            showId: data.showId,
+            matchedUsers: result.matchedUsers,
+          });
+
+          // Emit match event to all users in the room
+          io.to(roomCode).emit("matchFound", {
+            showId: data.showId,
+            matchedUsers: result.matchedUsers,
+          });
         }
+      } catch (error) {
+        console.error("Error processing swipe:", error);
+        socket.emit("error", "Failed to process swipe");
       }
     }
   });

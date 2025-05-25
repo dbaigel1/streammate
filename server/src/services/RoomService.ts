@@ -104,37 +104,64 @@ export class RoomService {
     return { room, user };
   }
 
-  addSwipe(
+  public addSwipe(
     roomCode: string,
-    swipe: Omit<SwipeData, "timestamp">
-  ): { room: Room; isMatch: boolean } | null {
+    swipe: SwipeData
+  ): { isMatch: boolean; matchedUsers?: string[] } {
     const room = this.rooms.get(roomCode);
     if (!room) {
-      return null;
+      throw new Error("Room not found");
     }
 
-    const swipeWithTimestamp: SwipeData = {
-      ...swipe,
-      timestamp: new Date(),
-    };
+    // Add the swipe to the room's swipes
+    if (!room.swipes) {
+      room.swipes = [];
+    }
+    room.swipes.push(swipe);
 
-    room.swipes.push(swipeWithTimestamp);
-
-    // Check for match if it's a right swipe
-    let isMatch = false;
+    // Check for matches only if the swipe is a right swipe
     if (swipe.direction === "right") {
-      const rightSwipesForShow = room.swipes.filter(
-        (s: SwipeData) => s.showId === swipe.showId && s.direction === "right"
+      // Get all right swipes for this show from other users
+      const otherRightSwipes = room.swipes.filter(
+        (s) =>
+          s.showId === swipe.showId &&
+          s.direction === "right" &&
+          s.userId !== swipe.userId
       );
 
-      const usersWhoSwipedRight = new Set(
-        rightSwipesForShow.map((s: SwipeData) => s.userId)
-      );
+      // If there are other right swipes, we have a match
+      if (otherRightSwipes.length > 0) {
+        // Get all users who matched (including the current user)
+        const matchedUsers = [
+          swipe.userId,
+          ...otherRightSwipes.map((s) => s.userId),
+        ];
 
-      isMatch = usersWhoSwipedRight.size === room.users.length;
+        // Add the match to the room's matches if it doesn't exist
+        if (!room.matches) {
+          room.matches = [];
+        }
+
+        // Only add the match if it's not already recorded
+        const matchExists = room.matches.some(
+          (m) =>
+            m.showId === swipe.showId &&
+            m.users.every((u) => matchedUsers.includes(u))
+        );
+
+        if (!matchExists) {
+          room.matches.push({
+            showId: swipe.showId,
+            users: matchedUsers,
+            timestamp: new Date().toISOString(),
+          });
+        }
+
+        return { isMatch: true, matchedUsers };
+      }
     }
 
-    return { room, isMatch };
+    return { isMatch: false };
   }
 
   getRoom(roomCode: string): Room | null {

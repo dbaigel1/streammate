@@ -23,9 +23,9 @@ const ShowCard: React.FC<ShowCardProps> = ({ show, onSwipe, isSwiping }) => {
       }`}
     >
       <div className="aspect-[2/3] relative overflow-hidden rounded-t-lg">
-        {show.imageUrl ? (
+        {show.poster_path ? (
           <img
-            src={show.imageUrl}
+            src={`https://image.tmdb.org/t/p/w500${show.poster_path}`}
             alt={show.title}
             className="w-full h-full object-cover"
           />
@@ -43,28 +43,19 @@ const ShowCard: React.FC<ShowCardProps> = ({ show, onSwipe, isSwiping }) => {
             <h2 className="text-2xl font-bold text-gray-900">{show.title}</h2>
             <div className="flex items-center space-x-2 mt-1">
               <span className="flex items-center text-sm text-gray-600">
-                {show.type === "movie" ? (
-                  <Film className="w-4 h-4 mr-1" />
-                ) : (
-                  <Tv className="w-4 h-4 mr-1" />
-                )}
-                {show.type === "movie" ? "Movie" : "TV Show"}
-              </span>
-              <span className="text-gray-400">•</span>
-              <span className="flex items-center text-sm text-gray-600">
                 <Calendar className="w-4 h-4 mr-1" />
-                {new Date(show.releaseDate).getFullYear()}
+                {new Date(show.release_date).getFullYear()}
               </span>
               <span className="text-gray-400">•</span>
               <span className="flex items-center text-sm text-gray-600">
                 <Star className="w-4 h-4 mr-1 text-yellow-400" />
-                {show.rating.toFixed(1)}
+                {show.vote_average.toFixed(1)}
               </span>
             </div>
           </div>
         </div>
 
-        <p className="text-gray-600 line-clamp-3">{show.description}</p>
+        <p className="text-gray-600 line-clamp-3">{show.overview}</p>
 
         <div className="flex justify-center space-x-4 pt-4">
           <button

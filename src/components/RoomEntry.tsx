@@ -114,23 +114,62 @@ export default function RoomEntry({ isConnecting }: RoomEntryProps) {
       setError("");
 
       const socket = socketService.getSocket();
-      console.log(
-        "Socket instance:",
-        socket?.connected ? "connected" : "disconnected"
-      );
+
+      // Ensure socket is connected before proceeding
+      if (!socket?.connected) {
+        console.log("Socket not connected, attempting to connect...");
+        await new Promise<void>((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            reject(new Error("Connection timeout"));
+          }, 5000);
+
+          const connectHandler = () => {
+            clearTimeout(timeout);
+            socket?.off("connect", connectHandler);
+            socket?.off("connect_error", errorHandler);
+            resolve();
+          };
+
+          const errorHandler = (error: Error) => {
+            clearTimeout(timeout);
+            socket?.off("connect", connectHandler);
+            socket?.off("connect_error", errorHandler);
+            reject(error);
+          };
+
+          socket?.once("connect", connectHandler);
+          socket?.once("connect_error", errorHandler);
+          socket?.connect();
+        });
+      }
+
+      console.log("Socket connected, emitting joinRoom event");
+
+      // Add a timeout for the join room operation
+      const joinTimeout = setTimeout(() => {
+        if (isJoining) {
+          console.error("Join room timeout - no response received");
+          setError("Failed to join room - no response from server");
+          setIsJoining(false);
+        }
+      }, 5000);
 
       socket?.emit("joinRoom", { username, roomCode }, (error?: string) => {
+        clearTimeout(joinTimeout);
         console.log("Join room response:", error);
         if (error) {
           setError(error);
           setIsJoining(false);
         }
         // Note: We don't set isJoining to false here because we're waiting for the roomJoined event
-        // which will trigger navigation
       });
     } catch (err) {
       console.error("Error joining room:", err);
-      setError("Failed to join room. Please try again.");
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to join room. Please try again."
+      );
       setIsJoining(false);
     }
   };

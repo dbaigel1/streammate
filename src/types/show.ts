@@ -3,12 +3,12 @@ import { User } from "../../server/src/types/index.js";
 export interface Show {
   id: string;
   title: string;
-  description: string;
-  imageUrl: string | null;
-  releaseDate: string;
-  rating: number;
-  type: "movie" | "tv";
-  streamingService: "netflix";
+  overview: string;
+  poster_path: string;
+  backdrop_path: string;
+  release_date: string;
+  vote_average: number;
+  streamingService: string;
 }
 
 export interface SwipeData {

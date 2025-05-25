@@ -8,6 +8,11 @@ export interface Room {
   code: string;
   users: User[];
   swipes: SwipeData[];
+  matches: {
+    showId: string;
+    users: string[];
+    timestamp: string;
+  }[];
   createdAt: Date;
 }
 

@@ -288,7 +288,9 @@ class SocketService {
     this.socket?.on("swipeUpdate", callback);
   }
 
-  onMatchFound(callback: (showId: string) => void) {
+  onMatchFound(
+    callback: (data: { showId: string; matchedUsers: string[] }) => void
+  ) {
     this.socket?.on("matchFound", callback);
   }
 
@@ -312,7 +314,9 @@ class SocketService {
     this.socket?.off("swipeUpdate", callback);
   }
 
-  offMatchFound(callback: (showId: string) => void) {
+  offMatchFound(
+    callback: (data: { showId: string; matchedUsers: string[] }) => void
+  ) {
     this.socket?.off("matchFound", callback);
   }
 

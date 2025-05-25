@@ -63,19 +63,16 @@ export class TMDBService {
     return data as T;
   }
 
-  private convertToShow(item: TMDBMovie | TMDBTVShow): Show {
+  private convertToShow(data: any): Show {
     return {
-      id: item.id.toString(),
-      title: "title" in item ? item.title : item.name,
-      description: item.overview,
-      imageUrl: item.poster_path
-        ? `https://image.tmdb.org/t/p/w500${item.poster_path}`
-        : null,
-      releaseDate:
-        "release_date" in item ? item.release_date : item.first_air_date,
-      rating: item.vote_average,
-      type: item.media_type === "movie" ? "movie" : "tv",
-      streamingService: "netflix",
+      id: data.id.toString(),
+      title: data.title,
+      overview: data.overview,
+      poster_path: data.poster_path,
+      backdrop_path: data.backdrop_path,
+      release_date: data.release_date,
+      vote_average: data.vote_average,
+      streamingService: "netflix", // Default for now
     };
   }
 
@@ -131,6 +128,62 @@ export class TMDBService {
       return allShows.sort((a, b) => b.rating - a.rating);
     } catch (error) {
       console.error("Error searching Netflix content:", error);
+      throw error;
+    }
+  }
+
+  async getShowDetails(showId: string): Promise<Show> {
+    try {
+      const response = await fetch(
+        `${this.BASE_URL}/movie/${showId}?api_key=${this.API_KEY}`
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch show details");
+      }
+
+      const data = await response.json();
+      return this.convertToShow(data);
+    } catch (error) {
+      console.error("Error fetching show details:", error);
+      throw error;
+    }
+  }
+
+  async searchShows(query: string): Promise<Show[]> {
+    try {
+      const response = await fetch(
+        `${this.BASE_URL}/search/movie?api_key=${
+          this.API_KEY
+        }&query=${encodeURIComponent(query)}`
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch shows");
+      }
+
+      const data = await response.json();
+      return data.results.map((result: any) => this.convertToShow(result));
+    } catch (error) {
+      console.error("Error searching shows:", error);
+      throw error;
+    }
+  }
+
+  async getPopularShows(): Promise<Show[]> {
+    try {
+      const response = await fetch(
+        `${this.BASE_URL}/movie/popular?api_key=${this.API_KEY}`
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch popular shows");
+      }
+
+      const data = await response.json();
+      return data.results.map((result: any) => this.convertToShow(result));
+    } catch (error) {
+      console.error("Error fetching popular shows:", error);
       throw error;
     }
   }
