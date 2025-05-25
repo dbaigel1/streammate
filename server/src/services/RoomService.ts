@@ -20,6 +20,7 @@ export class RoomService {
       code: roomCode,
       users: [user],
       swipes: [],
+      matches: [],
       createdAt: new Date(),
     };
 

@@ -209,7 +209,7 @@ io.on("connection", (socket) => {
           userId: user.id,
           showId: data.showId,
           direction: data.direction,
-          timestamp: new Date().toISOString(),
+          timestamp: new Date(),
         });
 
         // Broadcast swipe to other users in the room
