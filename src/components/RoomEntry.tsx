@@ -1,17 +1,20 @@
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { socket } from "../services/socket";
 import { Loader2 } from "lucide-react";
+import { Room, User } from "../../server/src/types/index.js";
+import { socketService } from "@/services/socket";
 
 interface RoomEntryProps {
   isConnecting: boolean;
 }
 
 export default function RoomEntry({ isConnecting }: RoomEntryProps) {
+  const navigate = useNavigate();
   const [username, setUsername] = useState("");
   const [roomCode, setRoomCode] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -24,40 +27,89 @@ export default function RoomEntry({ isConnecting }: RoomEntryProps) {
       return;
     }
 
-    setIsJoining(true);
-    setError(null);
-
     try {
-      socket.emit("createRoom", { username });
-    } catch (error) {
-      console.error("Error creating room:", error);
-      setError(
-        error instanceof Error ? error.message : "Failed to create room"
+      console.log("Create room button clicked with username:", username);
+      setIsJoining(true);
+      setError("");
+
+      const socket = socketService.getSocket();
+      console.log("Socket status before create room:", {
+        connected: socket?.connected,
+        id: socket?.id,
+        transport: socket?.io?.engine?.transport?.name,
+      });
+
+      socket?.emit(
+        "createRoom",
+        { username },
+        (response: { room: Room; user: User } | { error: string }) => {
+          console.log("Create room response received:", response);
+          if ("error" in response) {
+            console.error("Error in create room response:", response.error);
+            setError(response.error);
+          } else {
+            console.log("Room created successfully:", {
+              roomCode: response.room.code,
+              userId: response.user.id,
+              username: response.user.username,
+            });
+            navigate("/swipe", {
+              state: {
+                room: response.room,
+                user: response.user,
+                isHost: true,
+              },
+            });
+          }
+          setIsJoining(false);
+        }
       );
-    } finally {
+
+      // Add a timeout to handle cases where the callback isn't called
+      setTimeout(() => {
+        if (isJoining) {
+          console.error("Create room timeout - no response received");
+          setError("Failed to create room - no response from server");
+          setIsJoining(false);
+        }
+      }, 5000);
+    } catch (err) {
+      console.error("Error in handleCreateRoom:", err);
+      setError("Failed to create room. Please try again.");
       setIsJoining(false);
     }
   };
 
   const handleJoinRoom = async () => {
-    if (!username.trim()) {
-      setError("Please enter a username");
+    if (!username.trim() || !roomCode.trim()) {
+      setError("Please enter both username and room code");
       return;
     }
-    if (!roomCode.trim()) {
-      setError("Please enter a room code");
-      return;
-    }
-
-    setIsJoining(true);
-    setError(null);
 
     try {
-      socket.emit("joinRoom", { roomCode, username });
-    } catch (error) {
-      console.error("Error joining room:", error);
-      setError(error instanceof Error ? error.message : "Failed to join room");
-    } finally {
+      console.log("Attempting to join room:", { username, roomCode });
+      setIsJoining(true);
+      setError("");
+
+      const socket = socketService.getSocket();
+      console.log(
+        "Socket instance:",
+        socket?.connected ? "connected" : "disconnected"
+      );
+
+      socket?.emit("joinRoom", { username, roomCode }, (error?: string) => {
+        console.log("Join room response:", error);
+        if (error) {
+          setError(error);
+        } else {
+          // The roomJoined event will be handled by the socket listener in the parent component
+          // which will trigger navigation
+        }
+        setIsJoining(false);
+      });
+    } catch (err) {
+      console.error("Error joining room:", err);
+      setError("Failed to join room. Please try again.");
       setIsJoining(false);
     }
   };

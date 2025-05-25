@@ -3,12 +3,13 @@ import { createServer } from "http";
 import { Server } from "socket.io";
 import cors from "cors";
 import { RoomService } from "./services/RoomService.js";
+import { Room, User } from "./types/index.js";
 import {
   ClientToServerEvents,
   ServerToClientEvents,
   InterServerEvents,
   SocketData,
-} from "./types/index.js";
+} from "./types/socket.js";
 import dotenv from "dotenv";
 
 // Load environment variables
@@ -21,6 +22,8 @@ const allowedOrigins = [
   process.env.CLIENT_URL || "http://localhost:5173",
   "https://streammate.netlify.app",
   "http://localhost:5173",
+  "http://localhost:8080",
+  "https://streammate.onrender.com",
 ];
 
 // Configure CORS for Express
@@ -61,12 +64,18 @@ const io = new Server<
     },
     methods: ["GET", "POST"],
     credentials: true,
-    allowedHeaders: ["*"],
   },
-  transports: ["websocket", "polling"],
-  allowEIO3: true,
-  pingTimeout: 60000,
-  pingInterval: 25000,
+  transports: ["polling", "websocket"],
+  path: "/socket.io/",
+});
+
+// Add transport upgrade logging
+io.engine.on("upgrade", (transport) => {
+  console.log("Transport upgraded to:", transport.name);
+});
+
+io.engine.on("upgradeError", (error) => {
+  console.error("Transport upgrade error:", error);
 });
 
 const roomService = new RoomService();
@@ -76,95 +85,80 @@ io.on("connection", (socket) => {
   console.log("Client connected:", socket.id);
   console.log("Client origin:", socket.handshake.headers.origin);
 
-  socket.on("joinRoom", async (data, callback) => {
+  socket.on("createRoom", async (data, callback) => {
+    console.log("Attempting to create room:", {
+      username: data.username,
+      socketId: socket.id,
+    });
+
+    if (!data.username?.trim()) {
+      console.log("Create room failed: No username provided");
+      callback({ error: "Username is required" });
+      return;
+    }
+
     try {
-      console.log("Join room attempt:", {
-        roomCode: data.roomCode,
-        username: data.username,
-        socketId: socket.id,
-      });
-
-      let result;
-
-      // Try to join existing room first
-      try {
-        result = roomService.joinRoom(data.roomCode, data.username, socket.id);
-        console.log("Join room result:", result ? "Success" : "Room not found");
-      } catch (error) {
-        // If username is taken, check if it's a reconnection
-        if (
-          error instanceof Error &&
-          error.message === "Username is already taken in this room"
-        ) {
-          const room = roomService.getRoom(data.roomCode);
-          if (room) {
-            const existingUser = room.users.find(
-              (u) => u.username === data.username
-            );
-            if (existingUser) {
-              // This is a reconnection attempt, update the socket ID
-              existingUser.socketId = socket.id;
-              result = { room, user: existingUser };
-              console.log(
-                "User reconnected with existing username:",
-                data.username
-              );
-            }
-          }
-        }
-        if (!result) {
-          throw error;
-        }
-      }
-
-      // If room doesn't exist, create a new one
-      if (!result) {
-        console.log("Creating new room for:", data.username);
-        result = roomService.createRoom(data.username, socket.id);
-      }
-
-      if (!result) {
-        console.error("Failed to create or join room");
-        callback("Failed to create or join room");
-        return;
-      }
-
-      const { room, user } = result;
-      console.log("Room joined successfully:", {
-        roomCode: room.code,
-        userId: user.id,
-        username: user.username,
-        totalUsers: room.users.length,
-        isReconnection:
-          user.socketId === socket.id &&
-          room.users.some(
-            (u) => u.username === user.username && u.id !== user.id
-          ),
+      const result = roomService.createRoom(data.username.trim(), socket.id);
+      console.log("Room created successfully:", {
+        roomCode: result.room.code,
+        userId: result.user.id,
       });
 
       // Store user data in socket
       socket.data = {
-        userId: user.id,
-        roomCode: room.code,
+        user: result.user,
+        roomCode: result.room.code,
+      };
+
+      // Join the room
+      await socket.join(result.room.code);
+
+      // Notify the user who created the room
+      callback({ room: result.room, user: result.user });
+    } catch (error) {
+      console.error("Error creating room:", error);
+      callback({ error: "Failed to create room" });
+    }
+  });
+
+  socket.on("joinRoom", async (data, callback) => {
+    console.log("Join room attempt:", {
+      roomCode: data.roomCode,
+      username: data.username,
+      socketId: socket.id,
+    });
+
+    if (!data.username?.trim() || !data.roomCode?.trim()) {
+      callback("Username and room code are required");
+      return;
+    }
+
+    try {
+      const result = roomService.joinRoom(
+        data.roomCode.trim(),
+        data.username.trim(),
+        socket.id
+      );
+
+      if (!result) {
+        callback("Room not found");
+        return;
+      }
+
+      // Store user data in socket
+      socket.data = {
+        user: result.user,
+        roomCode: result.room.code,
       };
 
       // Join socket.io room
-      await socket.join(room.code);
-      console.log("Socket joined room:", room.code);
+      await socket.join(result.room.code);
 
       // Notify the user who just joined
-      socket.emit("roomJoined", room);
-      console.log("Emitted roomJoined event to:", socket.id);
+      socket.emit("roomJoined", { room: result.room, user: result.user });
 
-      // Only notify other users if this is a new user (not a reconnection)
-      if (
-        !room.users.some(
-          (u) => u.username === user.username && u.id !== user.id
-        )
-      ) {
-        socket.to(room.code).emit("userJoined", user);
-        console.log("Emitted userJoined event to room:", room.code);
-      }
+      // Notify other users in the room
+      socket.to(result.room.code).emit("userJoined", result.user);
 
       callback();
     } catch (error) {
@@ -174,57 +168,79 @@ io.on("connection", (socket) => {
   });
 
   socket.on("leaveRoom", () => {
-    const { userId, roomCode } = socket.data;
-    if (!userId || !roomCode) return;
+    const { user, roomCode } = socket.data;
+    if (user && roomCode) {
+      console.log("User leaving room:", {
+        userId: user.id,
+        roomCode,
+        socketId: socket.id,
+      });
 
-    const { room, user } = roomService.leaveRoom(userId);
-    if (room && user) {
+      // Leave the socket.io room
       socket.leave(roomCode);
-      socket.to(roomCode).emit("userLeft", user.id);
-    }
 
-    socket.data = {
-      userId: "",
-      roomCode: null,
-    };
+      // Remove user from room
+      const result = roomService.leaveRoom(user.id);
+      if (result.room) {
+        // Notify other users
+        socket.to(roomCode).emit("userLeft", user.id);
+      }
+
+      // Clear socket data
+      socket.data = {
+        user: null,
+        roomCode: null,
+      };
+    }
   });
 
   socket.on("swipe", (data) => {
-    const { userId, roomCode } = socket.data;
-    if (!userId || !roomCode) return;
-
-    const result = roomService.addSwipe(roomCode, {
-      showId: data.showId,
-      direction: data.direction,
-      userId,
-    });
-
-    if (result) {
-      const { room, isMatch } = result;
-
-      // Broadcast swipe to all users in the room
-      io.to(roomCode).emit("swipeUpdate", {
+    const { user, roomCode } = socket.data;
+    if (user && roomCode) {
+      console.log("Swipe received:", {
+        userId: user.id,
+        roomCode,
         showId: data.showId,
         direction: data.direction,
-        userId,
-        timestamp: new Date(),
       });
 
-      // If it's a match, notify all users
-      if (isMatch) {
-        io.to(roomCode).emit("matchFound", data.showId);
+      const result = roomService.addSwipe(roomCode, {
+        userId: user.id,
+        showId: data.showId,
+        direction: data.direction,
+      });
+
+      if (result) {
+        // Broadcast swipe to other users in the room
+        socket.to(roomCode).emit("swipeUpdate", {
+          userId: user.id,
+          showId: data.showId,
+          direction: data.direction,
+        });
+
+        // If it's a match, notify all users
+        if (result.isMatch) {
+          io.to(roomCode).emit("matchFound", data.showId);
+        }
       }
     }
   });
 
   socket.on("disconnect", () => {
-    console.log("Client disconnected:", socket.id);
-    const { userId, roomCode } = socket.data;
-    if (!userId || !roomCode) return;
+    const { user, roomCode } = socket.data;
+    if (user && roomCode) {
+      console.log("User disconnected:", {
+        userId: user.id,
+        roomCode,
+        socketId: socket.id,
+      });
 
-    const { room, user } = roomService.leaveRoom(userId);
-    if (room && user) {
-      socket.to(roomCode).emit("userLeft", user.id);
+      // Remove user from room
+      const result = roomService.leaveRoom(user.id);
+      if (result.room) {
+        // Notify other users
+        socket.to(roomCode).emit("userLeft", user.id);
+      }
     }
   });
 

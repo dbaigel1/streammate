@@ -7,7 +7,8 @@ import {
 } from "../../server/src/types/index.js";
 
 class SocketService {
-  private socket: Socket<ServerToClientEvents, ClientToServerEvents>;
+  private socket: Socket<ServerToClientEvents, ClientToServerEvents> | null =
+    null;
   private static instance: SocketService;
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
@@ -18,33 +19,22 @@ class SocketService {
 
   private constructor() {
     const socketUrl =
-      import.meta.env.VITE_SOCKET_URL || "http://localhost:3000";
-    console.log("Initializing socket service with URL:", socketUrl);
+      import.meta.env.VITE_SOCKET_URL || "http://localhost:3001";
+    console.log("Initializing socket connection to:", socketUrl);
 
     this.socket = io(socketUrl, {
-      transports: ["websocket", "polling"],
-      reconnection: true,
-      reconnectionAttempts: this.maxReconnectAttempts,
+      transports: ["polling", "websocket"],
+      path: "/socket.io/",
+      reconnectionAttempts: 5,
       reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
       timeout: 20000,
-      autoConnect: false,
-      forceNew: true,
     });
 
-    this.setupEventListeners();
-  }
-
-  public static getInstance(): SocketService {
-    if (!SocketService.instance) {
-      SocketService.instance = new SocketService();
-    }
-    return SocketService.instance;
-  }
-
-  private setupEventListeners() {
     this.socket.on("connect", () => {
-      console.log("Socket connected successfully with ID:", this.socket.id);
+      console.log("Socket connected:", {
+        id: this.socket?.id,
+        transport: this.socket?.io?.engine?.transport?.name,
+      });
       this.reconnectAttempts = 0;
       this.isConnecting = false;
 
@@ -58,14 +48,33 @@ class SocketService {
     });
 
     this.socket.on("connect_error", (error) => {
-      console.error("Connection error:", error.message);
+      console.error("Socket connection error:", error);
       this.reconnectAttempts++;
       this.isConnecting = false;
 
-      // Try polling if websocket fails
-      if (this.socket.io.opts.transports?.[0] === "websocket") {
-        console.log("Falling back to polling transport");
-        this.socket.io.opts.transports = ["polling", "websocket"];
+      // If we're using websocket and it fails, try polling
+      if (this.socket?.io?.engine?.transport?.name === "websocket") {
+        console.log("WebSocket failed, switching to polling transport");
+        if (this.socket.io) {
+          this.socket.io.opts.transports = ["polling"];
+        }
+        this.socket?.connect();
+      }
+    });
+
+    this.socket.io?.engine?.on("upgrade", (transport) => {
+      console.log("Transport upgraded to:", transport.name);
+    });
+
+    this.socket.io?.engine?.on("upgradeError", (error) => {
+      console.error("Transport upgrade error:", error);
+      // Fall back to polling if upgrade fails
+      if (this.socket?.io?.engine?.transport?.name === "websocket") {
+        console.log("Upgrade failed, falling back to polling");
+        if (this.socket.io) {
+          this.socket.io.opts.transports = ["polling"];
+        }
+        this.socket?.connect();
       }
     });
 
@@ -76,19 +85,19 @@ class SocketService {
       if (reason === "io server disconnect") {
         // Server initiated disconnect, try to reconnect
         console.log("Server initiated disconnect, attempting to reconnect...");
-        this.socket.connect();
+        this.socket?.connect();
       }
     });
 
-    this.socket.io.on("reconnect", (attempt) => {
+    this.socket.io?.on("reconnect", (attempt) => {
       console.log("Socket reconnected after", attempt, "attempts");
     });
 
-    this.socket.io.on("reconnect_error", (error) => {
+    this.socket.io?.on("reconnect_error", (error) => {
       console.error("Reconnection error:", error);
     });
 
-    this.socket.io.on("reconnect_failed", () => {
+    this.socket.io?.on("reconnect_failed", () => {
       console.error(
         "Failed to reconnect after",
         this.maxReconnectAttempts,
@@ -96,17 +105,31 @@ class SocketService {
       );
     });
 
-    this.socket.io.on("error", (error) => {
+    this.socket.io?.on("error", (error) => {
       console.error("Socket.IO error:", error);
     });
 
-    this.socket.io.on("ping", () => {
+    this.socket.io?.on("ping", () => {
       console.log("Ping sent to server");
     });
   }
 
+  public static getInstance(): SocketService {
+    if (!SocketService.instance) {
+      SocketService.instance = new SocketService();
+    }
+    return SocketService.instance;
+  }
+
   private ensureConnected(): Promise<void> {
-    if (this.socket.connected) {
+    console.log("ensureConnected called, current status:", {
+      connected: this.socket?.connected,
+      id: this.socket?.id,
+      isConnecting: this.isConnecting,
+      transport: this.socket?.io?.engine?.transport?.name,
+    });
+
+    if (this.socket?.connected) {
       console.log("Socket already connected");
       return Promise.resolve();
     }
@@ -124,39 +147,57 @@ class SocketService {
 
     this.connectionPromise = new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
+        console.error("Connection timeout reached");
         this.isConnecting = false;
         this.connectionPromise = null;
         reject(new Error("Connection timeout - please try again"));
       }, 15000);
 
-      this.socket.once("connect", () => {
-        console.log("Socket connected in ensureConnected");
+      const connectHandler = () => {
+        console.log("Socket connected in ensureConnected", {
+          id: this.socket?.id,
+          transport: this.socket?.io?.engine?.transport?.name,
+        });
         clearTimeout(timeout);
         this.isConnecting = false;
         this.connectionPromise = null;
+        this.socket?.off("connect", connectHandler);
+        this.socket?.off("connect_error", errorHandler);
         resolve();
-      });
+      };
 
-      this.socket.once("connect_error", (error) => {
-        console.error("Connection error in ensureConnected:", error);
+      const errorHandler = (error: Error) => {
+        console.error("Connection error in ensureConnected:", {
+          error,
+          transport: this.socket?.io?.engine?.transport?.name,
+        });
         clearTimeout(timeout);
         this.isConnecting = false;
         this.connectionPromise = null;
+        this.socket?.off("connect", connectHandler);
+        this.socket?.off("connect_error", errorHandler);
         reject(error);
-      });
+      };
 
-      this.socket.connect();
+      this.socket?.once("connect", connectHandler);
+      this.socket?.once("connect_error", errorHandler);
+      this.socket?.connect();
     });
 
     return this.connectionPromise;
   }
 
   public connect() {
-    this.socket.connect();
+    console.log("Manual connect called, current status:", {
+      connected: this.socket?.connected,
+      id: this.socket?.id,
+      transport: this.socket?.io?.engine?.transport?.name,
+    });
+    this.socket?.connect();
   }
 
   public disconnect() {
-    this.socket.disconnect();
+    this.socket?.disconnect();
   }
 
   public getSocket(): Socket {
@@ -191,7 +232,7 @@ class SocketService {
         }, 15000);
 
         console.log("Emitting joinRoom event...");
-        this.socket.emit(
+        this.socket?.emit(
           "joinRoom",
           {
             roomCode: normalizedRoomCode,
@@ -222,7 +263,7 @@ class SocketService {
     console.log("Leaving room");
     this.lastRoomCode = null;
     this.lastUsername = null;
-    this.socket.emit("leaveRoom");
+    this.socket?.emit("leaveRoom");
   }
 
   public swipe(showId: string, direction: "left" | "right") {
