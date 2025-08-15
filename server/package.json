@@ -8,7 +8,7 @@
     "dev": "PORT=3001 CLIENT_URL=http://localhost:8083 NODE_ENV=development TMDB_API_KEY=af8dc7b506665ef8c1835358ad1ff1ff tsx watch src/index.ts",
     "prebuild": "npm run clean",
     "build": "echo 'Starting build process...' && tsc && echo 'Verifying build...' && if [ ! -d 'dist' ]; then echo 'Build failed: dist directory not created' && exit 1; fi && if [ ! -f 'dist/index.js' ]; then echo 'Build failed: index.js not found in dist' && exit 1; fi && echo 'Build successful'",
-    "start": "if [ ! -d 'dist' ]; then echo 'Running build first...' && npm run build; fi && echo 'Starting server...' && node dist/index.js",
+    "start": "if [ ! -d 'dist' ]; then echo 'Running build first...' && npm run build; fi && echo 'Starting server...' && TMDB_API_KEY=af8dc7b506665ef8c1835358ad1ff1ff node dist/index.js",
     "test": "echo \"Error: no test specified\" && exit 1",
     "clean": "echo 'Cleaning dist directory...' && rm -rf dist && mkdir dist"
   },

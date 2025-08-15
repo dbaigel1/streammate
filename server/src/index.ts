@@ -16,6 +16,19 @@ import dotenv from "dotenv";
 // Load environment variables
 dotenv.config();
 
+// Debug environment variables
+console.log("=== ENVIRONMENT VARIABLES DEBUG ===");
+console.log("NODE_ENV:", process.env.NODE_ENV);
+console.log("PORT:", process.env.PORT);
+console.log("CLIENT_URL:", process.env.CLIENT_URL);
+console.log(
+  "TMDB_API_KEY:",
+  process.env.TMDB_API_KEY
+    ? "***" + process.env.TMDB_API_KEY.slice(-4)
+    : "NOT FOUND"
+);
+console.log("==================================");
+
 const app = express();
 const httpServer = createServer(app);
 

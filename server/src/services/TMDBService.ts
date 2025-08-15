@@ -34,10 +34,25 @@ export class TMDBService {
 
   private constructor() {
     const apiKey = process.env.TMDB_API_KEY;
+    console.log(
+      "TMDBService: Initializing with API key:",
+      apiKey ? "***" + apiKey.slice(-4) : "NOT FOUND"
+    );
+
     if (!apiKey) {
-      throw new Error("TMDB API key not found in environment variables");
+      console.error(
+        "TMDBService: CRITICAL ERROR - TMDB API key not found in environment variables"
+      );
+      console.error(
+        "TMDBService: Available environment variables:",
+        Object.keys(process.env).filter((key) => key.includes("TMDB"))
+      );
+      throw new Error(
+        "TMDB API key not found in environment variables. Please check your environment configuration."
+      );
     }
     this.API_KEY = apiKey;
+    console.log("TMDBService: Successfully initialized with API key");
   }
 
   public static getInstance(): TMDBService {
