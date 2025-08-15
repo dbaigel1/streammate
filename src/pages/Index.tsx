@@ -45,9 +45,13 @@ export default function Index() {
   const handleJoinRoom = (
     roomCode: string,
     username: string,
-    selectedContentType: ContentType
+    selectedContentType?: ContentType
   ) => {
-    setContentType(selectedContentType);
+    // If contentType is provided, use it (for room creation)
+    // If not provided, we'll get it from the room when we join
+    if (selectedContentType) {
+      setContentType(selectedContentType);
+    }
 
     // Create a temporary room and user for immediate display
     const tempRoom: Room = {
@@ -56,7 +60,7 @@ export default function Index() {
       users: [{ id: "temp", username, socketId: "temp" }],
       swipes: [],
       matches: [],
-      contentType: selectedContentType,
+      contentType: selectedContentType || "tv", // Default to tv if not provided
       createdAt: new Date(),
     };
 
@@ -64,6 +68,16 @@ export default function Index() {
 
     setRoom(tempRoom);
     setUser(tempUser);
+  };
+
+  const handleLeaveRoom = () => {
+    // Clear room state to return to home page
+    setRoom(null);
+    setUser(null);
+    setContentType(null);
+
+    // Also leave the room via socket
+    socketService.leaveRoom();
   };
 
   if (isConnecting) {
@@ -79,7 +93,7 @@ export default function Index() {
 
   // If we have a room and user, show the swipe interface
   if (room && user) {
-    return <Swipe room={room} user={user} />;
+    return <Swipe room={room} user={user} onLeaveRoom={handleLeaveRoom} />;
   }
 
   // Otherwise show the room entry form

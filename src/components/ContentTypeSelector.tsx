@@ -26,7 +26,7 @@ export default function ContentTypeSelector({
           Choose Content Type
         </CardTitle>
         <CardDescription className="text-gray-600">
-          Select what type of content you want to swipe through
+          Select what type of content you want to swipe through in your new room
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">

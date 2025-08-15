@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
 import { Room, User } from "../../server/src/types/index.js";
 import { Show } from "@/types/show";
 import { socketService } from "@/services/socket";
@@ -18,6 +17,7 @@ import { useToast } from "@/components/ui/use-toast";
 interface SwipeProps {
   room: Room;
   user: User;
+  onLeaveRoom: () => void;
 }
 
 interface Match {
@@ -26,8 +26,7 @@ interface Match {
   show?: Show;
 }
 
-export default function Swipe({ room, user }: SwipeProps) {
-  const navigate = useNavigate();
+export default function Swipe({ room, user, onLeaveRoom }: SwipeProps) {
   const { toast } = useToast();
 
   const [shows, setShows] = useState<Show[]>([]);
@@ -65,7 +64,7 @@ export default function Swipe({ room, user }: SwipeProps) {
           description: "Failed to join room. Please try again.",
           variant: "destructive",
         });
-        navigate("/");
+        // navigate("/"); // Removed navigate
       }
     };
 
@@ -177,7 +176,7 @@ export default function Swipe({ room, user }: SwipeProps) {
       socket?.off("swipeUpdate");
       socket?.off("matchFound");
     };
-  }, [room.code, user.username, room.contentType, navigate, toast]);
+  }, [room.code, user.username, room.contentType, toast]); // Removed navigate from dependency array
 
   const loadShows = async () => {
     setIsLoadingShows(true);
@@ -243,7 +242,7 @@ export default function Swipe({ room, user }: SwipeProps) {
 
   const handleLeaveRoom = () => {
     socketService.leaveRoom();
-    navigate("/");
+    onLeaveRoom(); // Call the prop function to clear room state
   };
 
   const handleCloseMatch = () => {
@@ -298,19 +297,17 @@ export default function Swipe({ room, user }: SwipeProps) {
       </div>
 
       {/* Match Dialog */}
-      <Dialog open={isMatchDialogOpen} onOpenChange={setIsMatchDialogOpen}>
+      <Dialog
+        open={isMatchDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            handleCloseMatch();
+          }
+        }}
+      >
         <DialogContent className="sm:max-w-[90vw] max-h-[90vh] overflow-y-auto bg-white/95 backdrop-blur-sm border-none">
           {currentMatch?.show && (
             <div className="relative">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="absolute right-2 top-2 z-10"
-                onClick={handleCloseMatch}
-              >
-                <X className="h-4 w-4" />
-              </Button>
-
               <div className="flex flex-col items-center text-center p-6">
                 <div className="text-4xl font-bold text-green-600 mb-4 animate-bounce">
                   It's a Match! 🎉
