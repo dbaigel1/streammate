@@ -5,8 +5,13 @@ export class RoomService {
   private rooms: Map<string, Room> = new Map();
   private userToRoom: Map<string, string> = new Map(); // userId -> roomCode
   private socketToUser: Map<string, string> = new Map(); // socketId -> userId
+  private roomShows: Map<string, any[]> = new Map(); // Store show list per room
 
-  createRoom(username: string, socketId: string): { room: Room; user: User } {
+  createRoom(
+    username: string,
+    socketId: string,
+    contentType: "movies" | "tv"
+  ): { room: Room; user: User } {
     const roomCode = this.generateRoomCode();
     const userId = uuidv4();
 
@@ -17,10 +22,12 @@ export class RoomService {
     };
 
     const room: Room = {
+      id: roomCode,
       code: roomCode,
       users: [user],
       swipes: [],
       matches: [],
+      contentType: contentType,
       createdAt: new Date(),
     };
 
@@ -114,21 +121,56 @@ export class RoomService {
       throw new Error("Room not found");
     }
 
+    // Ensure showId is a string for consistent comparison
+    const normalizedShowId = String(swipe.showId);
+
+    console.log("RoomService: Processing swipe:", {
+      originalShowId: swipe.showId,
+      normalizedShowId: normalizedShowId,
+      userId: swipe.userId,
+      direction: swipe.direction,
+      roomCode: roomCode,
+    });
+
     // Add the swipe to the room's swipes
     if (!room.swipes) {
       room.swipes = [];
     }
-    room.swipes.push(swipe);
+
+    // Store the swipe with normalized showId
+    const normalizedSwipe = {
+      ...swipe,
+      showId: normalizedShowId,
+    };
+    room.swipes.push(normalizedSwipe);
+
+    console.log(
+      "RoomService: Added swipe to room. Total swipes:",
+      room.swipes.length
+    );
 
     // Check for matches only if the swipe is a right swipe
     if (swipe.direction === "right") {
+      console.log(
+        "RoomService: Checking for matches on showId:",
+        normalizedShowId
+      );
+
       // Get all right swipes for this show from other users
       const otherRightSwipes = room.swipes.filter(
         (s) =>
-          s.showId === swipe.showId &&
+          String(s.showId) === normalizedShowId &&
           s.direction === "right" &&
           s.userId !== swipe.userId
       );
+
+      console.log(
+        "RoomService: Found other right swipes:",
+        otherRightSwipes.length
+      );
+      otherRightSwipes.forEach((s) => {
+        console.log("  - User:", s.userId, "on showId:", s.showId);
+      });
 
       // If there are other right swipes, we have a match
       if (otherRightSwipes.length > 0) {
@@ -138,6 +180,16 @@ export class RoomService {
           ...otherRightSwipes.map((s) => s.userId),
         ];
 
+        console.log("RoomService: MATCH FOUND!", {
+          showId: normalizedShowId,
+          matchedUsers: matchedUsers,
+          allSwipesInRoom: room.swipes.map((s) => ({
+            userId: s.userId,
+            showId: s.showId,
+            direction: s.direction,
+          })),
+        });
+
         // Add the match to the room's matches if it doesn't exist
         if (!room.matches) {
           room.matches = [];
@@ -146,16 +198,21 @@ export class RoomService {
         // Only add the match if it's not already recorded
         const matchExists = room.matches.some(
           (m) =>
-            m.showId === swipe.showId &&
+            String(m.showId) === normalizedShowId &&
             m.users.every((u) => matchedUsers.includes(u))
         );
 
         if (!matchExists) {
           room.matches.push({
-            showId: swipe.showId,
+            showId: normalizedShowId,
             users: matchedUsers,
             timestamp: new Date().toISOString(),
           });
+          console.log("RoomService: Added new match to room matches");
+        } else {
+          console.log(
+            "RoomService: Match already exists, not adding duplicate"
+          );
         }
 
         return { isMatch: true, matchedUsers };
@@ -163,6 +220,20 @@ export class RoomService {
     }
 
     return { isMatch: false };
+  }
+
+  public setRoomShows(roomCode: string, shows: any[]): void {
+    this.roomShows.set(roomCode, shows);
+    console.log(`RoomService: Set ${shows.length} shows for room ${roomCode}`);
+  }
+
+  public getRoomShows(roomCode: string): any[] | null {
+    return this.roomShows.get(roomCode) || null;
+  }
+
+  public clearRoomShows(roomCode: string): void {
+    this.roomShows.delete(roomCode);
+    console.log(`RoomService: Cleared shows for room ${roomCode}`);
   }
 
   getRoom(roomCode: string): Room | null {

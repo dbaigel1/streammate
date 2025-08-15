@@ -20,21 +20,27 @@ class SocketService {
   private constructor() {
     const socketUrl =
       import.meta.env.VITE_SOCKET_URL || "http://localhost:3001";
-    console.log("Initializing socket connection to:", socketUrl);
+    console.log("=== SOCKET SERVICE CONSTRUCTOR CALLED ===");
+    console.log("Socket URL:", socketUrl);
+    console.log("Stack trace:", new Error().stack);
 
     this.socket = io(socketUrl, {
-      transports: ["polling", "websocket"],
+      transports: ["polling"], // Start with polling only to avoid upgrade issues
       path: "/socket.io/",
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000,
+      reconnectionAttempts: 0, // Disable reconnection completely
+      reconnectionDelay: 0,
       timeout: 20000,
+      forceNew: false, // Don't force new connections
+      withCredentials: false,
+      autoConnect: false, // Don't auto-connect, we'll do it manually
     });
 
+    console.log("Socket instance created:", this.socket.id);
+
     this.socket.on("connect", () => {
-      console.log("Socket connected:", {
-        id: this.socket?.id,
-        transport: this.socket?.io?.engine?.transport?.name,
-      });
+      console.log("=== SOCKET CONNECTED ===");
+      console.log("Socket ID:", this.socket?.id);
+      console.log("Transport:", this.socket?.io?.engine?.transport?.name);
       this.reconnectAttempts = 0;
       this.isConnecting = false;
 
@@ -48,45 +54,31 @@ class SocketService {
     });
 
     this.socket.on("connect_error", (error) => {
-      console.error("Socket connection error:", error);
+      console.error("=== SOCKET CONNECTION ERROR ===", error);
       this.reconnectAttempts++;
       this.isConnecting = false;
 
-      // If we're using websocket and it fails, try polling
-      if (this.socket?.io?.engine?.transport?.name === "websocket") {
-        console.log("WebSocket failed, switching to polling transport");
-        if (this.socket.io) {
-          this.socket.io.opts.transports = ["polling"];
-        }
-        this.socket?.connect();
-      }
-    });
-
-    this.socket.io?.engine?.on("upgrade", (transport) => {
-      console.log("Transport upgraded to:", transport.name);
-    });
-
-    this.socket.io?.engine?.on("upgradeError", (error) => {
-      console.error("Transport upgrade error:", error);
-      // Fall back to polling if upgrade fails
-      if (this.socket?.io?.engine?.transport?.name === "websocket") {
-        console.log("Upgrade failed, falling back to polling");
-        if (this.socket.io) {
-          this.socket.io.opts.transports = ["polling"];
-        }
-        this.socket?.connect();
-      }
+      // Don't auto-reconnect on error, let the user handle it
+      console.log("Connection failed, not auto-reconnecting");
     });
 
     this.socket.on("disconnect", (reason) => {
-      console.log("Socket disconnected:", reason);
+      console.log("=== SOCKET DISCONNECTED ===");
+      console.log("Reason:", reason);
+      console.log("Socket ID before disconnect:", this.socket?.id);
+      console.log(
+        "Transport before disconnect:",
+        this.socket?.io?.engine?.transport?.name
+      );
+      console.log("Stack trace:", new Error().stack);
       this.isConnecting = false;
 
-      if (reason === "io server disconnect") {
-        // Server initiated disconnect, try to reconnect
-        console.log("Server initiated disconnect, attempting to reconnect...");
-        this.socket?.connect();
-      }
+      // Log disconnect reason and don't auto-reconnect
+      console.log("Client disconnected, not auto-reconnecting");
+      console.log("Disconnect reason details:", {
+        reason,
+        shouldReconnect: false,
+      });
     });
 
     this.socket.io?.on("reconnect", (attempt) => {
@@ -116,7 +108,10 @@ class SocketService {
 
   public static getInstance(): SocketService {
     if (!SocketService.instance) {
+      console.log("=== CREATING NEW SOCKET SERVICE INSTANCE ===");
       SocketService.instance = new SocketService();
+    } else {
+      console.log("=== REUSING EXISTING SOCKET SERVICE INSTANCE ===");
     }
     return SocketService.instance;
   }
@@ -187,13 +182,56 @@ class SocketService {
     return this.connectionPromise;
   }
 
-  public connect() {
-    console.log("Manual connect called, current status:", {
-      connected: this.socket?.connected,
-      id: this.socket?.id,
-      transport: this.socket?.io?.engine?.transport?.name,
+  public async connect(): Promise<void> {
+    if (this.connectionPromise) {
+      return this.connectionPromise;
+    }
+
+    if (this.socket?.connected) {
+      console.log("Socket already connected");
+      return Promise.resolve();
+    }
+
+    this.connectionPromise = new Promise((resolve, reject) => {
+      if (!this.socket) {
+        reject(new Error("Socket not initialized"));
+        return;
+      }
+
+      this.isConnecting = true;
+      console.log("Manually connecting socket...");
+
+      const timeout = setTimeout(() => {
+        this.isConnecting = false;
+        this.connectionPromise = null;
+        reject(new Error("Connection timeout"));
+      }, 15000);
+
+      const connectHandler = () => {
+        clearTimeout(timeout);
+        this.socket?.off("connect", connectHandler);
+        this.socket?.off("connect_error", errorHandler);
+        this.connectionPromise = null;
+        resolve();
+      };
+
+      const errorHandler = (error: Error) => {
+        clearTimeout(timeout);
+        this.socket?.off("connect", connectHandler);
+        this.socket?.off("connect_error", errorHandler);
+        this.isConnecting = false;
+        this.connectionPromise = null;
+        reject(error);
+      };
+
+      this.socket.once("connect", connectHandler);
+      this.socket.once("connect_error", errorHandler);
+
+      // Manually connect since autoConnect is disabled
+      this.socket.connect();
     });
-    this.socket?.connect();
+
+    return this.connectionPromise;
   }
 
   public disconnect() {
@@ -204,59 +242,81 @@ class SocketService {
     return this.socket;
   }
 
-  public async joinRoom(roomCode: string, username: string): Promise<void> {
-    try {
-      console.log("Attempting to join room:", { roomCode, username });
-
-      // Store credentials for reconnection
-      this.lastRoomCode = roomCode;
-      this.lastUsername = username;
-
-      // Ensure we're connected before attempting to join
-      await this.ensureConnected();
-
-      // Normalize the room code
-      const normalizedRoomCode = roomCode.trim().toUpperCase();
-
-      if (!normalizedRoomCode || normalizedRoomCode.length !== 6) {
-        throw new Error("Invalid room code format");
-      }
-
-      if (!username.trim()) {
-        throw new Error("Username is required");
-      }
-
-      return new Promise((resolve, reject) => {
-        const timeout = setTimeout(() => {
-          reject(new Error("Join room timeout - please try again"));
-        }, 15000);
-
-        console.log("Emitting joinRoom event...");
-        this.socket?.emit(
-          "joinRoom",
-          {
-            roomCode: normalizedRoomCode,
-            username: username.trim(),
-          },
-          (error) => {
-            clearTimeout(timeout);
-            if (error) {
-              console.error("Error in joinRoom callback:", error);
-              reject(new Error(error));
-            } else {
-              console.log("Successfully joined room");
-              resolve();
-            }
-          }
-        );
+  public async createRoom(
+    username: string,
+    contentType: string
+  ): Promise<{ room: any; user: any } | { error: string }> {
+    return new Promise((resolve, reject) => {
+      console.log("createRoom called with:", { username, contentType });
+      console.log("Socket status:", {
+        connected: this.socket?.connected,
+        id: this.socket?.id,
+        transport: this.socket?.io?.engine?.transport?.name,
       });
-    } catch (error) {
-      console.error("Error in joinRoom:", error);
-      // Clear stored credentials on error
-      this.lastRoomCode = null;
-      this.lastUsername = null;
-      throw error;
-    }
+
+      if (!this.socket?.connected) {
+        console.error("Socket not connected, rejecting");
+        reject(new Error("Socket not connected"));
+        return;
+      }
+
+      // Add timeout to handle cases where server doesn't respond
+      const timeout = setTimeout(() => {
+        console.error("createRoom timeout - no response from server");
+        reject(new Error("Server timeout - no response received"));
+      }, 10000); // 10 second timeout
+
+      console.log("Emitting createRoom event...");
+      this.socket.emit(
+        "createRoom",
+        { username, contentType },
+        (response: { room: any; user: any } | { error: string }) => {
+          console.log("createRoom callback received:", response);
+          clearTimeout(timeout);
+
+          if (!response) {
+            console.error(
+              "createRoom callback received null/undefined response"
+            );
+            reject(new Error("Invalid response from server"));
+            return;
+          }
+
+          if ("error" in response) {
+            resolve({ error: response.error });
+          } else {
+            resolve(response);
+          }
+        }
+      );
+    });
+  }
+
+  public async joinRoom(
+    roomCode: string,
+    username: string,
+    contentType: string
+  ): Promise<{ error?: string }> {
+    return new Promise((resolve, reject) => {
+      if (!this.socket?.connected) {
+        reject(new Error("Socket not connected"));
+        return;
+      }
+
+      this.socket.emit(
+        "joinRoom",
+        { username, roomCode, contentType },
+        (response: string | undefined) => {
+          if (response) {
+            // response is a string error message
+            resolve({ error: response });
+          } else {
+            // response is undefined, which means success
+            resolve({});
+          }
+        }
+      );
+    });
   }
 
   public leaveRoom() {
@@ -266,10 +326,24 @@ class SocketService {
     this.socket?.emit("leaveRoom");
   }
 
-  public swipe(showId: string, direction: "left" | "right") {
-    if (this.socket) {
-      this.socket.emit("swipe", { showId, direction });
+  public swipe(showId: string, direction: "left" | "right"): void {
+    if (!this.socket?.connected) {
+      console.error("Socket not connected");
+      return;
     }
+
+    // Ensure showId is normalized as string
+    const normalizedShowId = String(showId);
+
+    console.log("Socket: Emitting swipe event:", {
+      showId: normalizedShowId,
+      direction,
+    });
+
+    this.socket.emit("swipe", {
+      showId: normalizedShowId,
+      direction,
+    });
   }
 
   onRoomJoined(callback: (room: any) => void) {
@@ -322,6 +396,70 @@ class SocketService {
 
   offError(callback: (message: string) => void) {
     this.socket?.off("error", callback);
+  }
+
+  public async initializeRoomShows(): Promise<any[]> {
+    return new Promise((resolve, reject) => {
+      if (!this.socket?.connected) {
+        reject(new Error("Socket not connected"));
+        return;
+      }
+
+      this.socket.emit(
+        "initializeRoomShows",
+        (response: { shows: any[] } | { error: string }) => {
+          if ("error" in response) {
+            reject(new Error(response.error));
+          } else {
+            resolve(response.shows);
+          }
+        }
+      );
+    });
+  }
+
+  public async getNetflixContent(): Promise<any[]> {
+    return new Promise((resolve, reject) => {
+      if (!this.socket?.connected) {
+        reject(new Error("Socket not connected"));
+        return;
+      }
+
+      this.socket.emit(
+        "getNetflixContent",
+        (response: { shows: any[] } | { error: string }) => {
+          if ("error" in response) {
+            reject(new Error(response.error));
+          } else {
+            resolve(response.shows);
+          }
+        }
+      );
+    });
+  }
+
+  public async getShowDetails(
+    showId: string,
+    contentType: string
+  ): Promise<any> {
+    return new Promise((resolve, reject) => {
+      if (!this.socket?.connected) {
+        reject(new Error("Socket not connected"));
+        return;
+      }
+
+      this.socket.emit(
+        "getShowDetails",
+        { showId, contentType },
+        (response: { show: any } | { error: string }) => {
+          if ("error" in response) {
+            reject(new Error(response.error));
+          } else {
+            resolve(response.show);
+          }
+        }
+      );
+    });
   }
 }
 

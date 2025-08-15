@@ -1,292 +1,220 @@
-import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import { Card, CardContent } from "@/components/ui/card";
+import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2 } from "lucide-react";
-import { Room, User } from "../../server/src/types/index.js";
 import { socketService } from "@/services/socket";
+import ContentTypeSelector, { ContentType } from "./ContentTypeSelector";
 
 interface RoomEntryProps {
+  onJoinRoom: (
+    roomCode: string,
+    username: string,
+    contentType: ContentType
+  ) => void;
   isConnecting: boolean;
 }
 
-export default function RoomEntry({ isConnecting }: RoomEntryProps) {
-  const navigate = useNavigate();
-  const [username, setUsername] = useState("");
+export default function RoomEntry({
+  onJoinRoom,
+  isConnecting,
+}: RoomEntryProps) {
   const [roomCode, setRoomCode] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [username, setUsername] = useState("");
+  const [contentType, setContentType] = useState<ContentType | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
   const [isJoining, setIsJoining] = useState(false);
-  const [activeTab, setActiveTab] = useState<"create" | "join">("create");
-
-  useEffect(() => {
-    // Set up socket event listener for roomJoined
-    const socket = socketService.getSocket();
-
-    const handleRoomJoined = (data: { room: Room; user: User }) => {
-      console.log("Room joined event received:", data);
-      navigate("/swipe", {
-        state: {
-          room: data.room,
-          user: data.user,
-          isHost: false,
-        },
-      });
-    };
-
-    socket?.on("roomJoined", handleRoomJoined);
-
-    return () => {
-      socket?.off("roomJoined", handleRoomJoined);
-    };
-  }, [navigate]);
+  const [error, setError] = useState("");
+  const [connectionStatus, setConnectionStatus] = useState("");
 
   const handleCreateRoom = async () => {
-    if (!username.trim()) {
-      setError("Please enter a username");
+    if (!username.trim() || !contentType) {
+      setError("Please enter a username and select a content type");
       return;
     }
 
+    console.log("Creating room with:", {
+      username: username.trim(),
+      contentType,
+    });
+    setIsCreating(true);
+    setError("");
+    setConnectionStatus("Creating room...");
+
     try {
-      console.log("Create room button clicked with username:", username);
-      setIsJoining(true);
-      setError("");
-
-      const socket = socketService.getSocket();
-      console.log("Socket status before create room:", {
-        connected: socket?.connected,
-        id: socket?.id,
-        transport: socket?.io?.engine?.transport?.name,
-      });
-
-      socket?.emit(
-        "createRoom",
-        { username },
-        (response: { room: Room; user: User } | { error: string }) => {
-          console.log("Create room response received:", response);
-          if ("error" in response) {
-            console.error("Error in create room response:", response.error);
-            setError(response.error);
-          } else {
-            console.log("Room created successfully:", {
-              roomCode: response.room.code,
-              userId: response.user.id,
-              username: response.user.username,
-            });
-            navigate("/swipe", {
-              state: {
-                room: response.room,
-                user: response.user,
-                isHost: true,
-              },
-            });
-          }
-          setIsJoining(false);
-        }
+      console.log("Calling socketService.createRoom...");
+      const result = await socketService.createRoom(
+        username.trim(),
+        contentType
       );
+      console.log("createRoom result:", result);
 
-      // Add a timeout to handle cases where the callback isn't called
-      setTimeout(() => {
-        if (isJoining) {
-          console.error("Create room timeout - no response received");
-          setError("Failed to create room - no response from server");
-          setIsJoining(false);
-        }
-      }, 5000);
-    } catch (err) {
-      console.error("Error in handleCreateRoom:", err);
+      if ("error" in result) {
+        console.error("Error creating room:", result.error);
+        setError(result.error);
+      } else {
+        console.log("Room created successfully:", result);
+        setConnectionStatus("Room created successfully! Redirecting...");
+        onJoinRoom(result.room.code, result.user.username, contentType);
+      }
+    } catch (error) {
+      console.error("Exception in handleCreateRoom:", error);
       setError("Failed to create room. Please try again.");
-      setIsJoining(false);
+    } finally {
+      setIsCreating(false);
+      setConnectionStatus("");
     }
   };
 
   const handleJoinRoom = async () => {
-    if (!username.trim() || !roomCode.trim()) {
-      setError("Please enter both username and room code");
+    if (!roomCode.trim() || !username.trim() || !contentType) {
+      setError("Please enter a room code, username, and select a content type");
       return;
     }
 
+    setIsJoining(true);
+    setError("");
+    setConnectionStatus("Joining room...");
+
     try {
-      console.log("Attempting to join room:", { username, roomCode });
-      setIsJoining(true);
-      setError("");
-
-      const socket = socketService.getSocket();
-
-      // Ensure socket is connected before proceeding
-      if (!socket?.connected) {
-        console.log("Socket not connected, attempting to connect...");
-        await new Promise<void>((resolve, reject) => {
-          const timeout = setTimeout(() => {
-            reject(new Error("Connection timeout"));
-          }, 5000);
-
-          const connectHandler = () => {
-            clearTimeout(timeout);
-            socket?.off("connect", connectHandler);
-            socket?.off("connect_error", errorHandler);
-            resolve();
-          };
-
-          const errorHandler = (error: Error) => {
-            clearTimeout(timeout);
-            socket?.off("connect", connectHandler);
-            socket?.off("connect_error", errorHandler);
-            reject(error);
-          };
-
-          socket?.once("connect", connectHandler);
-          socket?.once("connect_error", errorHandler);
-          socket?.connect();
-        });
-      }
-
-      console.log("Socket connected, emitting joinRoom event");
-
-      // Add a timeout for the join room operation
-      const joinTimeout = setTimeout(() => {
-        if (isJoining) {
-          console.error("Join room timeout - no response received");
-          setError("Failed to join room - no response from server");
-          setIsJoining(false);
-        }
-      }, 5000);
-
-      socket?.emit("joinRoom", { username, roomCode }, (error?: string) => {
-        clearTimeout(joinTimeout);
-        console.log("Join room response:", error);
-        if (error) {
-          setError(error);
-          setIsJoining(false);
-        }
-        // Note: We don't set isJoining to false here because we're waiting for the roomJoined event
-      });
-    } catch (err) {
-      console.error("Error joining room:", err);
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Failed to join room. Please try again."
+      const result = await socketService.joinRoom(
+        roomCode.trim().toUpperCase(),
+        username.trim(),
+        contentType
       );
+      if (result.error) {
+        setError(result.error);
+      } else {
+        setConnectionStatus("Joined room successfully! Redirecting...");
+        onJoinRoom(roomCode.trim().toUpperCase(), username.trim(), contentType);
+      }
+    } catch (error) {
+      setError("Failed to join room. Please try again.");
+    } finally {
       setIsJoining(false);
+      setConnectionStatus("");
     }
   };
 
-  return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-purple-600 via-pink-600 to-blue-600">
-      <Card className="w-full max-w-md bg-white/90 backdrop-blur-sm">
-        <CardContent className="p-6">
-          <h1 className="text-3xl font-bold text-center mb-8 text-gray-900">
-            Streammate
-          </h1>
+  const handleInputChange = () => {
+    setError("");
+    setConnectionStatus("");
+  };
 
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="username" className="text-gray-700">
-                Username <span className="text-red-500">*</span>
-              </Label>
+  const isButtonDisabled =
+    isConnecting || isCreating || isJoining || !username.trim() || !contentType;
+
+  return (
+    <div className="container mx-auto px-4 py-8 max-w-md">
+      <div className="text-center mb-8">
+        <h1 className="text-4xl font-bold text-white mb-2">Streammate</h1>
+        <p className="text-lg text-white/90">
+          Find your next favorite show together
+        </p>
+      </div>
+
+      <ContentTypeSelector
+        selectedType={contentType}
+        onSelect={setContentType}
+      />
+
+      {contentType && (
+        <Card className="mt-6 bg-white/95 backdrop-blur-sm shadow-xl">
+          <CardHeader>
+            <CardTitle className="text-gray-900">Join or Create Room</CardTitle>
+            <CardDescription className="text-gray-600">
+              {contentType === "movies" ? "🎬" : "📺"} Swiping through{" "}
+              {contentType}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <label
+                htmlFor="username"
+                className="block text-sm font-medium text-gray-700 mb-1"
+              >
+                Username
+              </label>
               <Input
                 id="username"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
+                type="text"
                 placeholder="Enter your username"
+                value={username}
+                onChange={(e) => {
+                  setUsername(e.target.value);
+                  handleInputChange();
+                }}
                 className="w-full"
-                disabled={isJoining || isConnecting}
               />
             </div>
 
-            <Tabs
-              value={activeTab}
-              onValueChange={(value) =>
-                setActiveTab(value as "create" | "join")
-              }
-              className="w-full"
-            >
+            <Tabs defaultValue="join" className="w-full">
               <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="create">Create Room</TabsTrigger>
                 <TabsTrigger value="join">Join Room</TabsTrigger>
+                <TabsTrigger value="create">Create Room</TabsTrigger>
               </TabsList>
 
-              <TabsContent value="create" className="space-y-4">
-                <div className="bg-blue-50 p-4 rounded-lg">
-                  <p className="text-sm text-blue-700">
-                    Create a new room and share the code with your friends to
-                    start matching shows together!
-                  </p>
+              <TabsContent value="join" className="space-y-4">
+                <div>
+                  <label
+                    htmlFor="roomCode"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
+                    Room Code
+                  </label>
+                  <Input
+                    id="roomCode"
+                    type="text"
+                    placeholder="Enter room code"
+                    value={roomCode}
+                    onChange={(e) => {
+                      setRoomCode(e.target.value);
+                      handleInputChange();
+                    }}
+                    className="w-full"
+                  />
                 </div>
+
                 <Button
-                  onClick={handleCreateRoom}
-                  className="w-full"
-                  disabled={isJoining || isConnecting}
+                  onClick={handleJoinRoom}
+                  disabled={isButtonDisabled}
+                  className="w-full bg-blue-600 hover:bg-blue-700"
                 >
-                  {isJoining || isConnecting ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Creating Room...
-                    </>
-                  ) : (
-                    "Create Room"
-                  )}
+                  {isJoining ? "Joining..." : "Join Room"}
                 </Button>
               </TabsContent>
 
-              <TabsContent value="join" className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="roomCode" className="text-gray-700">
-                    Room Code
-                  </Label>
-                  <Input
-                    id="roomCode"
-                    value={roomCode}
-                    onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
-                    placeholder="Enter room code"
-                    className="w-full"
-                    disabled={isJoining || isConnecting}
-                  />
-                </div>
-                <div className="bg-blue-50 p-4 rounded-lg">
-                  <p className="text-sm text-blue-700">
-                    Enter the room code shared by your friend to join their room
-                    and start matching shows together!
-                  </p>
-                </div>
+              <TabsContent value="create" className="space-y-4">
                 <Button
-                  onClick={handleJoinRoom}
-                  className="w-full"
-                  disabled={isJoining || isConnecting}
+                  onClick={handleCreateRoom}
+                  disabled={isButtonDisabled}
+                  className="w-full bg-green-600 hover:bg-green-700"
                 >
-                  {isJoining || isConnecting ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Joining Room...
-                    </>
-                  ) : (
-                    "Join Room"
-                  )}
+                  {isCreating ? "Creating..." : "Create Room"}
                 </Button>
               </TabsContent>
             </Tabs>
 
             {error && (
-              <div className="bg-red-50 p-4 rounded-lg">
-                <p className="text-sm text-red-700">{error}</p>
+              <div className="text-red-600 text-sm text-center bg-red-50 p-3 rounded border border-red-200">
+                {error}
               </div>
             )}
 
-            {(isJoining || isConnecting) && (
-              <div className="bg-blue-50 p-4 rounded-lg">
-                <p className="text-sm text-blue-700">
-                  {isConnecting
-                    ? "Connecting to server..."
-                    : "Joining room, please wait..."}
-                </p>
+            {connectionStatus && (
+              <div className="text-blue-600 text-sm text-center bg-blue-50 p-3 rounded border border-blue-200">
+                {connectionStatus}
               </div>
             )}
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

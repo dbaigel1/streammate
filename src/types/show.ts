@@ -14,7 +14,7 @@ export interface Show {
 export interface SwipeData {
   showId: string;
   direction: "left" | "right";
-  user: string;
+  userId: string;
   timestamp: Date;
 }
 
@@ -23,5 +23,11 @@ export interface Room {
   code: string;
   users: User[];
   swipes: SwipeData[];
+  matches: {
+    showId: string;
+    users: string[];
+    timestamp: string;
+  }[];
+  contentType: "movies" | "tv";
   createdAt: Date;
 }

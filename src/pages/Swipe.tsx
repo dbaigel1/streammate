@@ -1,22 +1,23 @@
 import React, { useState, useEffect } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { Room, User } from "../../server/src/types/index.js";
 import { Show } from "@/types/show";
 import { socketService } from "@/services/socket";
-import { tmdbService } from "@/services/tmdb";
 import ShowCard from "@/components/ShowCard";
 import UserIndicator from "@/components/UserIndicator";
 import RoomStatus from "@/components/RoomStatus";
+import StreamingPlatforms from "@/components/StreamingPlatforms";
+import ContentTypeIndicator from "@/components/ContentTypeIndicator";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { X } from "lucide-react";
 import { toast } from "react-hot-toast";
+import { useToast } from "@/components/ui/use-toast";
 
-interface LocationState {
+interface SwipeProps {
   room: Room;
   user: User;
-  isHost: boolean;
 }
 
 interface Match {
@@ -25,10 +26,9 @@ interface Match {
   show?: Show;
 }
 
-export default function Swipe() {
-  const location = useLocation();
+export default function Swipe({ room, user }: SwipeProps) {
   const navigate = useNavigate();
-  const { room, user, isHost } = location.state as LocationState;
+  const { toast } = useToast();
 
   const [shows, setShows] = useState<Show[]>([]);
   const [currentShowIndex, setCurrentShowIndex] = useState(0);
@@ -40,6 +40,37 @@ export default function Swipe() {
   const [isMatchDialogOpen, setIsMatchDialogOpen] = useState(false);
 
   useEffect(() => {
+    // Log initial room users state
+    console.log(
+      "Initial room users:",
+      roomUsers.map((u) => ({ id: u.id, username: u.username }))
+    );
+    console.log("Current user:", { id: user.id, username: user.username });
+  }, []);
+
+  useEffect(() => {
+    // Join the room via socket
+    const joinRoom = async () => {
+      try {
+        await socketService.joinRoom(
+          room.code,
+          user.username,
+          room.contentType
+        );
+        console.log("Successfully joined room:", room.code);
+      } catch (error) {
+        console.error("Failed to join room:", error);
+        toast({
+          title: "Error",
+          description: "Failed to join room. Please try again.",
+          variant: "destructive",
+        });
+        navigate("/");
+      }
+    };
+
+    joinRoom();
+
     // Load shows when component mounts
     loadShows();
 
@@ -47,13 +78,44 @@ export default function Swipe() {
     const socket = socketService.getSocket();
 
     socket?.on("userJoined", (newUser: User) => {
-      console.log("User joined:", newUser);
-      setRoomUsers((prev) => [...prev, newUser]);
+      console.log("User joined event received:", newUser);
+      setRoomUsers((prev) => {
+        // Check if user already exists to prevent duplicates
+        if (prev.some((u) => u.id === newUser.id)) {
+          console.log(
+            "User already exists in room, not adding duplicate:",
+            newUser.username,
+            "Current users:",
+            prev.map((u) => ({ id: u.id, username: u.username }))
+          );
+          return prev;
+        }
+        console.log(
+          "Adding new user to room:",
+          newUser.username,
+          "Total users now:",
+          prev.length + 1
+        );
+        return [...prev, newUser];
+      });
     });
 
     socket?.on("userLeft", (userId: string) => {
-      console.log("User left:", userId);
-      setRoomUsers((prev) => prev.filter((u) => u.id !== userId));
+      console.log("User left event received for userId:", userId);
+      setRoomUsers((prev) => {
+        const userToRemove = prev.find((u) => u.id === userId);
+        if (userToRemove) {
+          console.log(
+            "Removing user from room:",
+            userToRemove.username,
+            "Total users now:",
+            prev.length - 1
+          );
+        } else {
+          console.log("User not found in room for removal:", userId);
+        }
+        return prev.filter((u) => u.id !== userId);
+      });
     });
 
     socket?.on("swipeUpdate", (swipeData) => {
@@ -63,23 +125,40 @@ export default function Swipe() {
     socket?.on(
       "matchFound",
       async (data: { showId: string; matchedUsers: string[] }) => {
-        console.log("Match found!", data);
-        toast.success("It's a match! 🎉", {
-          duration: 4000,
-          position: "top-center",
-          style: {
-            background: "#10B981",
-            color: "white",
-            fontSize: "1.2rem",
-            padding: "1rem",
-          },
+        // Ensure showId is normalized as string
+        const normalizedShowId = String(data.showId);
+
+        console.log("Client: Match found!", {
+          receivedShowId: data.showId,
+          receivedShowIdType: typeof data.showId,
+          normalizedShowId: normalizedShowId,
+          matchedUsers: data.matchedUsers,
+        });
+
+        toast({
+          title: "It's a match! 🎉",
+          description: "You and your friends matched on this show!",
         });
 
         // Fetch show details for the match
         try {
-          const showDetails = await tmdbService.getShowDetails(data.showId);
+          console.log(
+            "Client: About to fetch show details for match ID:",
+            normalizedShowId
+          );
+          const showDetails = await socketService.getShowDetails(
+            normalizedShowId,
+            room.contentType
+          );
+          console.log("Client: Received show details:", {
+            id: showDetails.id,
+            title: showDetails.title,
+            originalRequestedId: normalizedShowId,
+          });
+
           const match: Match = {
-            ...data,
+            showId: normalizedShowId,
+            matchedUsers: data.matchedUsers,
             show: showDetails,
           };
 
@@ -98,16 +177,36 @@ export default function Swipe() {
       socket?.off("swipeUpdate");
       socket?.off("matchFound");
     };
-  }, []);
+  }, [room.code, user.username, room.contentType, navigate, toast]);
 
   const loadShows = async () => {
     setIsLoadingShows(true);
     try {
-      const netflixShows = await tmdbService.getNetflixContent();
-      setShows(netflixShows);
+      console.log("Client: Initializing synchronized room shows...");
+      const roomShows = await socketService.initializeRoomShows();
+      console.log("Client: Received synchronized shows from server:", {
+        totalShows: roomShows.length,
+        firstFewShows: roomShows
+          .slice(0, 5)
+          .map((s) => ({ id: s.id, title: s.title })),
+        lastFewShows: roomShows
+          .slice(-5)
+          .map((s) => ({ id: s.id, title: s.title })),
+      });
+
+      setShows(roomShows);
       setCurrentShowIndex(0);
     } catch (error) {
-      console.error("Error loading shows:", error);
+      console.error("Error loading synchronized shows:", error);
+      // Fallback to individual loading if room sync fails
+      try {
+        console.log("Client: Falling back to individual show loading...");
+        const netflixShows = await socketService.getNetflixContent();
+        setShows(netflixShows);
+        setCurrentShowIndex(0);
+      } catch (fallbackError) {
+        console.error("Fallback loading also failed:", fallbackError);
+      }
     } finally {
       setIsLoadingShows(false);
     }
@@ -119,8 +218,21 @@ export default function Swipe() {
     setIsSwiping(true);
     const currentShow = shows[currentShowIndex];
 
-    // Emit swipe event
-    socketService.swipe(currentShow.id, direction);
+    // Ensure showId is a string for consistent handling
+    const normalizedShowId = String(currentShow.id);
+
+    console.log("Client: Swiping on show:", {
+      currentShowIndex: currentShowIndex,
+      totalShows: shows.length,
+      showId: normalizedShowId,
+      showIdType: typeof normalizedShowId,
+      title: currentShow.title,
+      direction,
+      allShowIds: shows.slice(0, 10).map((s) => ({ id: s.id, title: s.title })),
+    });
+
+    // Emit swipe event with normalized showId
+    socketService.swipe(normalizedShowId, direction);
 
     // Move to next show after a short delay
     setTimeout(() => {
@@ -142,14 +254,23 @@ export default function Swipe() {
   return (
     <div className="container mx-auto px-4 py-8 max-w-4xl">
       <div className="flex justify-between items-center mb-8">
-        <RoomStatus room={{ ...room, users: roomUsers }} currentUser={user} />
+        <div className="flex items-center gap-4">
+          <RoomStatus room={{ ...room, users: roomUsers }} currentUser={user} />
+          <ContentTypeIndicator contentType={room.contentType || "tv"} />
+        </div>
         <Button variant="outline" onClick={handleLeaveRoom}>
           Leave Room
         </Button>
       </div>
 
-      <div className="mb-8">
+      {/* Users Section */}
+      <div className="mb-6">
         <UserIndicator users={roomUsers} currentUser={user} />
+      </div>
+
+      {/* Streaming Platforms Section */}
+      <div className="mb-8">
+        <StreamingPlatforms />
       </div>
 
       <div className="relative min-h-[600px]">

@@ -4,7 +4,20 @@ export interface User {
   socketId: string;
 }
 
+export interface Show {
+  id: string;
+  title: string;
+  overview: string;
+  poster_path: string | null;
+  backdrop_path: string | null;
+  release_date: string;
+  vote_average: number;
+  type: "movie" | "tv";
+  streamingService: string;
+}
+
 export interface Room {
+  id: string;
   code: string;
   users: User[];
   swipes: SwipeData[];
@@ -13,6 +26,7 @@ export interface Room {
     users: string[];
     timestamp: string;
   }[];
+  contentType: "movies" | "tv";
   createdAt: Date;
 }
 
