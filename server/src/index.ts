@@ -391,6 +391,26 @@ io.on("connection", (socket) => {
     }
   });
 
+  // New event handler for getting detailed show information
+  socket.on("getDetailedShowInfo", async (data, callback) => {
+    try {
+      console.log(
+        "Client requested detailed show info for:",
+        data.showId,
+        "contentType:",
+        data.contentType
+      );
+      const show = await tmdbService.getDetailedShowInfo(
+        data.showId,
+        data.contentType as "movies" | "tv"
+      );
+      callback({ show });
+    } catch (error) {
+      console.error("Error getting detailed show info:", error);
+      callback({ error: "Failed to get detailed show info" });
+    }
+  });
+
   // New event handler for getting show details
   socket.on("getShowDetails", async (data, callback) => {
     try {

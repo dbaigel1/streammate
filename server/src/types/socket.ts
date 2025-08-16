@@ -18,6 +18,10 @@ export interface ClientToServerEvents {
     data: { showId: string; contentType: string },
     callback: (response: { show: any } | { error: string }) => void
   ) => void;
+  getDetailedShowInfo: (
+    data: { showId: string; contentType: string },
+    callback: (response: { show: any } | { error: string }) => void
+  ) => void;
   initializeRoomShows: (
     callback: (response: { shows: any[] } | { error: string }) => void
   ) => void;

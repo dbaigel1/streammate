@@ -461,6 +461,30 @@ class SocketService {
       );
     });
   }
+
+  public async getDetailedShowInfo(
+    showId: string,
+    contentType: string
+  ): Promise<any> {
+    return new Promise((resolve, reject) => {
+      if (!this.socket?.connected) {
+        reject(new Error("Socket not connected"));
+        return;
+      }
+
+      this.socket.emit(
+        "getDetailedShowInfo",
+        { showId, contentType },
+        (response: { show: any } | { error: string }) => {
+          if ("error" in response) {
+            reject(new Error(response.error));
+          } else {
+            resolve(response.show);
+          }
+        }
+      );
+    });
+  }
 }
 
 export const socketService = SocketService.getInstance();

@@ -132,6 +132,24 @@ export class TMDBService {
       vote_average: data.vote_average,
       type: data.media_type || (data.title ? "movie" : "tv"),
       streamingService: "netflix",
+      // Additional detailed fields
+      genres: data.genres,
+      runtime: data.runtime,
+      status: data.status,
+      tagline: data.tagline,
+      vote_count: data.vote_count,
+      popularity: data.popularity,
+      original_language: data.original_language,
+      production_companies: data.production_companies,
+      spoken_languages: data.spoken_languages,
+      budget: data.budget,
+      revenue: data.revenue,
+      episode_run_time: data.episode_run_time,
+      number_of_seasons: data.number_of_seasons,
+      number_of_episodes: data.number_of_episodes,
+      first_air_date: data.first_air_date,
+      last_air_date: data.last_air_date,
+      in_production: data.in_production,
     };
 
     console.log("TMDBService: Converted to Show:", {
@@ -248,7 +266,7 @@ export class TMDBService {
           `Server: Using TV endpoint for show ID: ${normalizedShowId}`
         );
         response = await fetch(
-          `${this.BASE_URL}/tv/${normalizedShowId}?api_key=${this.API_KEY}`
+          `${this.BASE_URL}/tv/${normalizedShowId}?api_key=${this.API_KEY}&append_to_response=credits,external_ids,content_ratings`
         );
 
         if (!response.ok) {
@@ -268,6 +286,9 @@ export class TMDBService {
           overview: data.overview?.substring(0, 100) + "...",
           poster_path: data.poster_path,
           vote_average: data.vote_average,
+          genres: data.genres?.length || 0,
+          seasons: data.number_of_seasons,
+          episodes: data.number_of_episodes,
         });
       } else if (contentType === "movies") {
         // User selected movies, so use movie endpoint
@@ -275,7 +296,7 @@ export class TMDBService {
           `Server: Using movie endpoint for show ID: ${normalizedShowId}`
         );
         response = await fetch(
-          `${this.BASE_URL}/movie/${normalizedShowId}?api_key=${this.API_KEY}`
+          `${this.BASE_URL}/movie/${normalizedShowId}?api_key=${this.API_KEY}&append_to_response=credits,external_ids,content_ratings`
         );
 
         if (!response.ok) {
@@ -295,6 +316,8 @@ export class TMDBService {
           overview: data.overview?.substring(0, 100) + "...",
           poster_path: data.poster_path,
           vote_average: data.vote_average,
+          genres: data.genres?.length || 0,
+          runtime: data.runtime,
         });
       } else {
         // Auto-detect (fallback for backward compatibility)
@@ -304,7 +327,7 @@ export class TMDBService {
 
         // Try movie endpoint first
         response = await fetch(
-          `${this.BASE_URL}/movie/${normalizedShowId}?api_key=${this.API_KEY}`
+          `${this.BASE_URL}/movie/${normalizedShowId}?api_key=${this.API_KEY}&append_to_response=credits,external_ids,content_ratings`
         );
 
         if (response.ok) {
@@ -319,11 +342,13 @@ export class TMDBService {
             overview: data.overview?.substring(0, 100) + "...",
             poster_path: data.poster_path,
             vote_average: data.vote_average,
+            genres: data.genres?.length || 0,
+            runtime: data.runtime,
           });
         } else {
           // If movie not found, try TV show endpoint
           response = await fetch(
-            `${this.BASE_URL}/tv/${normalizedShowId}?api_key=${this.API_KEY}`
+            `${this.BASE_URL}/tv/${normalizedShowId}?api_key=${this.API_KEY}&append_to_response=credits,external_ids,content_ratings`
           );
 
           if (!response.ok) {
@@ -343,6 +368,9 @@ export class TMDBService {
             overview: data.overview?.substring(0, 100) + "...",
             poster_path: data.poster_path,
             vote_average: data.vote_average,
+            genres: data.genres?.length || 0,
+            seasons: data.number_of_seasons,
+            episodes: data.number_of_episodes,
           });
         }
       }
@@ -386,6 +414,94 @@ export class TMDBService {
       return allShows.sort((a, b) => b.vote_average - a.vote_average);
     } catch (error) {
       console.error("Server: Error searching Netflix content:", error);
+      throw error;
+    }
+  }
+
+  public async getDetailedShowInfo(
+    showId: string,
+    contentType?: "movies" | "tv"
+  ): Promise<Show> {
+    try {
+      // Ensure showId is normalized as string
+      const normalizedShowId = String(showId);
+
+      console.log(
+        `Server: Fetching detailed show info for ID: ${normalizedShowId} (contentType: ${
+          contentType || "auto-detect"
+        })`
+      );
+
+      let response: Response;
+      let data: any;
+
+      if (contentType === "tv") {
+        // User selected TV shows, so use TV endpoint with all details
+        response = await fetch(
+          `${this.BASE_URL}/tv/${normalizedShowId}?api_key=${this.API_KEY}&append_to_response=credits,external_ids,content_ratings,images,videos`
+        );
+
+        if (!response.ok) {
+          throw new Error(
+            `Failed to fetch detailed TV show info for ID: ${normalizedShowId}`
+          );
+        }
+
+        data = await response.json();
+        data.media_type = "tv";
+      } else if (contentType === "movies") {
+        // User selected movies, so use movie endpoint with all details
+        response = await fetch(
+          `${this.BASE_URL}/movie/${normalizedShowId}?api_key=${this.API_KEY}&append_to_response=credits,external_ids,content_ratings,images,videos`
+        );
+
+        if (!response.ok) {
+          throw new Error(
+            `Failed to fetch detailed movie info for ID: ${normalizedShowId}`
+          );
+        }
+
+        data = await response.json();
+        data.media_type = "movie";
+      } else {
+        // Auto-detect (fallback for backward compatibility)
+        // Try movie endpoint first
+        response = await fetch(
+          `${this.BASE_URL}/movie/${normalizedShowId}?api_key=${this.API_KEY}&append_to_response=credits,external_ids,content_ratings,images,videos`
+        );
+
+        if (response.ok) {
+          data = await response.json();
+          data.media_type = "movie";
+        } else {
+          // If movie not found, try TV show endpoint
+          response = await fetch(
+            `${this.BASE_URL}/tv/${normalizedShowId}?api_key=${this.API_KEY}&append_to_response=credits,external_ids,content_ratings,images,videos`
+          );
+
+          if (!response.ok) {
+            throw new Error(
+              `Failed to fetch detailed show info for ID: ${normalizedShowId}`
+            );
+          }
+
+          data = await response.json();
+          data.media_type = "tv";
+        }
+      }
+
+      console.log(`Server: Retrieved detailed info for ${data.media_type}:`, {
+        id: data.id,
+        title: data.title || data.name,
+        genres: data.genres?.length || 0,
+        runtime: data.runtime,
+        seasons: data.number_of_seasons,
+        episodes: data.number_of_episodes,
+      });
+
+      return this.convertToShow(data);
+    } catch (error) {
+      console.error("Server: Error fetching detailed show info:", error);
       throw error;
     }
   }

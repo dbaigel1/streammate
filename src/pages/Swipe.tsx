@@ -37,6 +37,7 @@ export default function Swipe({ room, user, onLeaveRoom }: SwipeProps) {
   const [matches, setMatches] = useState<Match[]>([]);
   const [currentMatch, setCurrentMatch] = useState<Match | null>(null);
   const [isMatchDialogOpen, setIsMatchDialogOpen] = useState(false);
+  const [isMatchesExpanded, setIsMatchesExpanded] = useState(false); // Start collapsed on mobile
 
   useEffect(() => {
     // Log initial room users state
@@ -251,28 +252,32 @@ export default function Swipe({ room, user, onLeaveRoom }: SwipeProps) {
   };
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-4xl">
-      <div className="flex justify-between items-center mb-8">
+    <div className="container mx-auto px-4 py-8 max-w-4xl pb-24 md:pb-8">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-6 sm:mb-8 gap-4">
         <div className="flex items-center gap-4">
           <RoomStatus room={{ ...room, users: roomUsers }} currentUser={user} />
           <ContentTypeIndicator contentType={room.contentType || "tv"} />
         </div>
-        <Button variant="outline" onClick={handleLeaveRoom}>
+        <Button
+          variant="outline"
+          onClick={handleLeaveRoom}
+          className="w-full sm:w-auto"
+        >
           Leave Room
         </Button>
       </div>
 
       {/* Users Section */}
-      <div className="mb-6">
+      <div className="mb-4 sm:mb-6">
         <UserIndicator users={roomUsers} currentUser={user} />
       </div>
 
       {/* Streaming Platforms Section */}
-      <div className="mb-8">
+      <div className="mb-6 sm:mb-8">
         <StreamingPlatforms />
       </div>
 
-      <div className="relative min-h-[600px]">
+      <div className="relative min-h-[500px] sm:min-h-[600px] mb-4">
         {isLoadingShows ? (
           <div className="flex items-center justify-center h-full">
             <Loader2 className="w-8 h-8 animate-spin" />
@@ -283,6 +288,7 @@ export default function Swipe({ room, user, onLeaveRoom }: SwipeProps) {
             show={shows[currentShowIndex]}
             onSwipe={handleSwipe}
             isSwiping={isSwiping}
+            roomContentType={room.contentType || "tv"}
           />
         ) : (
           <div className="text-center py-12">
@@ -370,19 +376,78 @@ export default function Swipe({ room, user, onLeaveRoom }: SwipeProps) {
         </DialogContent>
       </Dialog>
 
-      {/* Matches History */}
+      {/* Matches History - Mobile Friendly */}
       {matches.length > 0 && (
-        <div className="fixed bottom-4 right-4 bg-white/90 backdrop-blur-sm rounded-lg p-4 shadow-lg max-w-md">
-          <h3 className="text-lg font-semibold mb-2">Your Matches</h3>
-          <div className="space-y-2">
-            {matches.map((match, index) => (
-              <div key={index} className="flex items-center space-x-2">
-                <div className="w-2 h-2 bg-green-500 rounded-full" />
-                <span className="text-sm">
-                  {match.show?.title || "Loading..."}
-                </span>
+        <div className="fixed bottom-4 left-4 right-4 md:left-auto md:right-4 md:w-80 z-50">
+          {/* Collapsible Matches Panel */}
+          <div className="bg-white/95 backdrop-blur-sm rounded-lg shadow-lg border border-gray-200">
+            {/* Header with collapse/expand toggle */}
+            <div
+              className="flex items-center justify-between p-3 cursor-pointer hover:bg-gray-50 rounded-t-lg border-b border-gray-200"
+              onClick={() => setIsMatchesExpanded(!isMatchesExpanded)}
+            >
+              <div className="flex items-center space-x-2">
+                <div className="w-3 h-3 bg-green-500 rounded-full" />
+                <h3 className="text-sm font-semibold text-gray-700">
+                  Matches ({matches.length})
+                </h3>
+                {!isMatchesExpanded && (
+                  <div className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full">
+                    {matches.length} new
+                  </div>
+                )}
               </div>
-            ))}
+              <div className="text-gray-500">
+                {isMatchesExpanded ? (
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M5 15l7-7 7 7"
+                    />
+                  </svg>
+                ) : (
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M19 9l-7 7-7-7"
+                    />
+                  </svg>
+                )}
+              </div>
+            </div>
+
+            {/* Expandable Content */}
+            {isMatchesExpanded && (
+              <div className="p-3 max-h-48 overflow-y-auto">
+                <div className="space-y-2">
+                  {matches.map((match, index) => (
+                    <div
+                      key={index}
+                      className="flex items-center space-x-2 p-2 rounded bg-gray-50 hover:bg-gray-100"
+                    >
+                      <div className="w-2 h-2 bg-green-500 rounded-full flex-shrink-0" />
+                      <span className="text-sm text-gray-700 truncate">
+                        {match.show?.title || "Loading..."}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
