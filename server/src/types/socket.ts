@@ -33,6 +33,11 @@ export interface ServerToClientEvents {
   userLeft: (userId: string) => void;
   swipeUpdate: (swipe: Omit<SwipeData, "timestamp">) => void;
   matchFound: (data: { showId: string; matchedUsers: string[] }) => void;
+  roomStateUpdate: (data: {
+    users: User[];
+    roomCode: string;
+    contentType: string;
+  }) => void;
   error: (message: string) => void;
 }
 

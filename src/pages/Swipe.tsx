@@ -46,6 +46,10 @@ export default function Swipe({ room, user, onLeaveRoom }: SwipeProps) {
       roomUsers.map((u) => ({ id: u.id, username: u.username }))
     );
     console.log("Current user:", { id: user.id, username: user.username });
+    console.log(
+      "Room prop users:",
+      room.users.map((u) => ({ id: u.id, username: u.username }))
+    );
   }, []);
 
   useEffect(() => {
@@ -99,6 +103,22 @@ export default function Swipe({ room, user, onLeaveRoom }: SwipeProps) {
         return [...prev, newUser];
       });
     });
+
+    socket?.on(
+      "roomStateUpdate",
+      (data: { users: User[]; roomCode: string; contentType: string }) => {
+        console.log("Room state update received:", data);
+        console.log(
+          "Previous room users:",
+          roomUsers.map((u) => ({ id: u.id, username: u.username }))
+        );
+        console.log(
+          "New room users:",
+          data.users.map((u) => ({ id: u.id, username: u.username }))
+        );
+        setRoomUsers(data.users);
+      }
+    );
 
     socket?.on("userLeft", (userId: string) => {
       console.log("User left event received for userId:", userId);
@@ -173,6 +193,7 @@ export default function Swipe({ room, user, onLeaveRoom }: SwipeProps) {
 
     return () => {
       socket?.off("userJoined");
+      socket?.off("roomStateUpdate");
       socket?.off("userLeft");
       socket?.off("swipeUpdate");
       socket?.off("matchFound");

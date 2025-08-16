@@ -230,8 +230,38 @@ io.on("connection", (socket) => {
       // Join the room
       await socket.join(result.room.code);
 
-      // Notify other users in the room
+      // Send current room state to the joining user
+      console.log("Sending roomStateUpdate to joining user:", {
+        users: result.room.users.map((u) => ({
+          id: u.id,
+          username: u.username,
+        })),
+        roomCode: result.room.code,
+        contentType: result.room.contentType,
+      });
+      socket.emit("roomStateUpdate", {
+        users: result.room.users,
+        roomCode: result.room.code,
+        contentType: result.room.contentType,
+      });
+
+      // Notify other users in the room about the new user
       socket.to(result.room.code).emit("userJoined", result.user);
+
+      // Also notify other users about the updated room state
+      console.log("Sending roomStateUpdate to other users in room:", {
+        users: result.room.users.map((u) => ({
+          id: u.id,
+          username: u.username,
+        })),
+        roomCode: result.room.code,
+        contentType: result.room.contentType,
+      });
+      socket.to(result.room.code).emit("roomStateUpdate", {
+        users: result.room.users,
+        roomCode: result.room.code,
+        contentType: result.room.contentType,
+      });
 
       callback(undefined); // Success - this is the correct type
     } catch (error) {
@@ -255,8 +285,23 @@ io.on("connection", (socket) => {
       // Remove user from room
       const result = roomService.leaveRoom(user.id);
       if (result.room) {
-        // Notify other users
+        // Notify other users about the user leaving
         socket.to(roomCode).emit("userLeft", user.id);
+
+        // Also notify other users about the updated room state
+        console.log("Sending roomStateUpdate after user left:", {
+          users: result.room.users.map((u) => ({
+            id: u.id,
+            username: u.username,
+          })),
+          roomCode: result.room.code,
+          contentType: result.room.contentType,
+        });
+        socket.to(roomCode).emit("roomStateUpdate", {
+          users: result.room.users,
+          roomCode: result.room.code,
+          contentType: result.room.contentType,
+        });
       }
 
       // Clear socket data
@@ -443,8 +488,23 @@ io.on("connection", (socket) => {
       // Remove user from room
       const result = roomService.leaveRoom(user.id);
       if (result.room) {
-        // Notify other users
+        // Notify other users about the user leaving
         socket.to(roomCode).emit("userLeft", user.id);
+
+        // Also notify other users about the updated room state
+        console.log("Sending roomStateUpdate after user disconnect:", {
+          users: result.room.users.map((u) => ({
+            id: u.id,
+            username: u.username,
+          })),
+          roomCode: result.room.code,
+          contentType: result.room.contentType,
+        });
+        socket.to(roomCode).emit("roomStateUpdate", {
+          users: result.room.users,
+          roomCode: result.room.code,
+          contentType: result.room.contentType,
+        });
       }
     }
   });
