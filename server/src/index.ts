@@ -176,6 +176,18 @@ io.on("connection", (socket) => {
 
       // Join the room
       await socket.join(result.room.code);
+      console.log("Room creator joined socket.io room:", {
+        username: result.user.username,
+        userId: result.user.id,
+        socketId: socket.id,
+        roomCode: result.room.code,
+      });
+
+      // Send contentType update to ensure UI consistency
+      socket.emit("roomContentTypeUpdate", {
+        contentType: result.room.contentType,
+        roomCode: result.room.code,
+      });
 
       // Notify the user who created the room
       console.log("About to call callback with success response...");
@@ -229,6 +241,12 @@ io.on("connection", (socket) => {
 
       // Join the room
       await socket.join(result.room.code);
+      console.log("User joined socket.io room:", {
+        username: result.user.username,
+        userId: result.user.id,
+        socketId: socket.id,
+        roomCode: result.room.code,
+      });
 
       // Send current room state to the joining user
       console.log("Sending roomStateUpdate to joining user:", {
@@ -243,6 +261,12 @@ io.on("connection", (socket) => {
         users: result.room.users,
         roomCode: result.room.code,
         contentType: result.room.contentType,
+      });
+
+      // Also send the room's contentType specifically to ensure UI consistency
+      socket.emit("roomContentTypeUpdate", {
+        contentType: result.room.contentType,
+        roomCode: result.room.code,
       });
 
       // Notify other users in the room about the new user
@@ -312,7 +336,7 @@ io.on("connection", (socket) => {
     }
   });
 
-  socket.on("swipe", (data) => {
+  socket.on("swipe", async (data) => {
     const { user, roomCode } = socket.data;
     if (user && roomCode) {
       console.log("Server: Swipe received:", {
@@ -362,13 +386,81 @@ io.on("connection", (socket) => {
             normalizedShowId
           );
 
-          // Emit match event to all users in the room
-          io.to(roomCode).emit("matchFound", {
-            showId: normalizedShowId,
-            matchedUsers: result.matchedUsers,
+          // Get all users in the room for logging
+          const roomUsers = currentRoom?.users || [];
+          console.log(
+            "Server: About to emit matchFound to all users in room:",
+            {
+              roomCode,
+              totalUsers: roomUsers.length,
+              users: roomUsers.map((u: any) => ({
+                id: u.id,
+                username: u.username,
+                socketId: u.socketId,
+              })),
+              matchedUsers: result.matchedUsers,
+              matchedUsernames: result.matchedUsers.map(
+                (userId) =>
+                  roomUsers.find((u: any) => u.id === userId)?.username
+              ),
+            }
+          );
+
+          // Get all users in the room for logging
+          const roomSockets = await io.in(roomCode).fetchSockets();
+          console.log("Server: Socket.io room details:", {
+            roomCode,
+            totalSocketsInRoom: roomSockets.length,
+            socketIds: roomSockets.map((s) => s.id),
+            usersInRoom: roomUsers.map((u: any) => ({
+              id: u.id,
+              username: u.username,
+              socketId: u.socketId,
+              isInSocketRoom: roomSockets.some((s) => s.id === u.socketId),
+            })),
           });
 
-          console.log("Server: Emitted matchFound event successfully");
+          // Small delay to ensure all users are properly in the room
+          await new Promise((resolve) => setTimeout(resolve, 100));
+
+          // Get current room state for verification
+          const matchRoom = roomService.getRoom(roomCode);
+          const matchRoomUsers = matchRoom?.users || [];
+
+          console.log("Server: About to emit matchFound event:", {
+            roomCode,
+            totalUsersInRoom: matchRoomUsers.length,
+            users: matchRoomUsers.map((u: any) => ({
+              id: u.id,
+              username: u.username,
+              socketId: u.socketId,
+            })),
+            matchedUsers: result.matchedUsers || [],
+            matchedUsernames: (result.matchedUsers || []).map(
+              (userId) =>
+                matchRoomUsers.find((u: any) => u.id === userId)?.username
+            ),
+          });
+
+          // Emit match event to all users in the room using the most reliable method
+          io.to(roomCode).emit("matchFound", {
+            showId: normalizedShowId,
+            matchedUsers: result.matchedUsers || [],
+          });
+
+          // Also emit to individual sockets as a backup to ensure delivery
+          for (const socket of roomSockets) {
+            socket.emit("matchFound", {
+              showId: normalizedShowId,
+              matchedUsers: result.matchedUsers || [],
+            });
+          }
+
+          console.log(
+            "Server: Emitted matchFound event successfully to room:",
+            roomCode,
+            "using both room broadcast and individual socket emission"
+          );
         }
       } catch (error) {
         console.error("Server: Error processing swipe:", error);

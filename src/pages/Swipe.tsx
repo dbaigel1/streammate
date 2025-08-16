@@ -120,6 +120,21 @@ export default function Swipe({ room, user, onLeaveRoom }: SwipeProps) {
       }
     );
 
+    socket?.on(
+      "roomContentTypeUpdate",
+      (data: { contentType: string; roomCode: string }) => {
+        console.log("Room contentType update received:", data);
+        console.log("Current room contentType:", room.contentType);
+        console.log("New contentType:", data.contentType);
+
+        // Update the room's contentType to ensure UI consistency
+        if (room.code === data.roomCode) {
+          room.contentType = data.contentType as "movies" | "tv";
+          console.log("Updated room contentType to:", room.contentType);
+        }
+      }
+    );
+
     socket?.on("userLeft", (userId: string) => {
       console.log("User left event received for userId:", userId);
       setRoomUsers((prev) => {
@@ -149,10 +164,16 @@ export default function Swipe({ room, user, onLeaveRoom }: SwipeProps) {
         const normalizedShowId = String(data.showId);
 
         console.log("Client: Match found!", {
+          currentUser: { id: user.id, username: user.username },
+          roomCode: room.code,
           receivedShowId: data.showId,
           receivedShowIdType: typeof data.showId,
           normalizedShowId: normalizedShowId,
           matchedUsers: data.matchedUsers,
+          currentRoomUsers: roomUsers.map((u) => ({
+            id: u.id,
+            username: u.username,
+          })),
         });
 
         toast({
@@ -182,7 +203,20 @@ export default function Swipe({ room, user, onLeaveRoom }: SwipeProps) {
             show: showDetails,
           };
 
-          setMatches((prev) => [...prev, match]);
+          // Check if this match already exists to prevent duplicates
+          setMatches((prev) => {
+            const matchExists = prev.some((m) => m.showId === normalizedShowId);
+            if (matchExists) {
+              console.log(
+                "Match already exists, not adding duplicate:",
+                normalizedShowId
+              );
+              return prev;
+            }
+            console.log("Adding new match:", normalizedShowId);
+            return [...prev, match];
+          });
+
           setCurrentMatch(match);
           setIsMatchDialogOpen(true);
         } catch (error) {
@@ -194,6 +228,7 @@ export default function Swipe({ room, user, onLeaveRoom }: SwipeProps) {
     return () => {
       socket?.off("userJoined");
       socket?.off("roomStateUpdate");
+      socket?.off("roomContentTypeUpdate");
       socket?.off("userLeft");
       socket?.off("swipeUpdate");
       socket?.off("matchFound");

@@ -38,6 +38,10 @@ export interface ServerToClientEvents {
     roomCode: string;
     contentType: string;
   }) => void;
+  roomContentTypeUpdate: (data: {
+    contentType: string;
+    roomCode: string;
+  }) => void;
   error: (message: string) => void;
 }
 
