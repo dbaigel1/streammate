@@ -418,6 +418,27 @@ class SocketService {
     });
   }
 
+  public async checkRoomExists(roomCode: string): Promise<boolean> {
+    return new Promise((resolve, reject) => {
+      if (!this.socket?.connected) {
+        reject(new Error("Socket not connected"));
+        return;
+      }
+
+      this.socket.emit(
+        "checkRoomExists",
+        { roomCode },
+        (response: { exists: boolean } | { error: string }) => {
+          if ("error" in response) {
+            reject(new Error(response.error));
+          } else {
+            resolve(response.exists);
+          }
+        }
+      );
+    });
+  }
+
   public async getNetflixContent(): Promise<any[]> {
     return new Promise((resolve, reject) => {
       if (!this.socket?.connected) {

@@ -8,7 +8,7 @@ import RoomStatus from "@/components/RoomStatus";
 import StreamingPlatforms from "@/components/StreamingPlatforms";
 import ContentTypeIndicator from "@/components/ContentTypeIndicator";
 import { Button } from "@/components/ui/button";
-import { Loader2 } from "lucide-react";
+import { Loader2, Share2, Copy, Check } from "lucide-react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { X } from "lucide-react";
 import { toast } from "react-hot-toast";
@@ -43,6 +43,8 @@ export default function Swipe({ room, user, onLeaveRoom }: SwipeProps) {
   const [currentMatch, setCurrentMatch] = useState<Match | null>(null);
   const [isMatchDialogOpen, setIsMatchDialogOpen] = useState(false);
   const [isMatchesExpanded, setIsMatchesExpanded] = useState(false); // Start collapsed on mobile
+  const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
+  const [copiedToClipboard, setCopiedToClipboard] = useState(false);
 
   useEffect(() => {
     // Log initial room users state
@@ -58,27 +60,9 @@ export default function Swipe({ room, user, onLeaveRoom }: SwipeProps) {
   }, []);
 
   useEffect(() => {
-    // Join the room via socket
-    const joinRoom = async () => {
-      try {
-        await socketService.joinRoom(
-          room.code,
-          user.username,
-          room.contentType
-        );
-        console.log("Successfully joined room:", room.code);
-      } catch (error) {
-        console.error("Failed to join room:", error);
-        toast({
-          title: "Error",
-          description: "Failed to join room. Please try again.",
-          variant: "destructive",
-        });
-        // navigate("/"); // Removed navigate
-      }
-    };
-
-    joinRoom();
+    // Note: Room joining is now handled in the Index page for shareable links
+    // This prevents duplicate join attempts that could cause errors
+    console.log("Swipe component mounted, user already in room:", room.code);
 
     // Load shows when component mounts
     loadShows();
@@ -325,6 +309,30 @@ export default function Swipe({ room, user, onLeaveRoom }: SwipeProps) {
     setCurrentMatch(null);
   };
 
+  const handleShareRoom = () => {
+    setIsShareDialogOpen(true);
+  };
+
+  const handleCopyLink = async () => {
+    const shareUrl = `${window.location.origin}/join/${room.code}`;
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopiedToClipboard(true);
+      setTimeout(() => setCopiedToClipboard(false), 2000);
+      toast({
+        title: "Success",
+        description: "Room link copied to clipboard!",
+      });
+    } catch (error) {
+      console.error("Failed to copy to clipboard:", error);
+      toast({
+        title: "Error",
+        description: "Failed to copy link",
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <div className="container mx-auto px-4 py-8 max-w-4xl pb-24 md:pb-8">
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-6 sm:mb-8 gap-4">
@@ -332,13 +340,23 @@ export default function Swipe({ room, user, onLeaveRoom }: SwipeProps) {
           <RoomStatus room={{ ...room, users: roomUsers }} currentUser={user} />
           <ContentTypeIndicator contentType={room.contentType || "tv"} />
         </div>
-        <Button
-          variant="outline"
-          onClick={handleLeaveRoom}
-          className="w-full sm:w-auto"
-        >
-          Leave Room
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={handleShareRoom}
+            className="flex items-center gap-2"
+          >
+            <Share2 className="w-4 h-4" />
+            Share Room
+          </Button>
+          <Button
+            variant="outline"
+            onClick={handleLeaveRoom}
+            className="w-full sm:w-auto"
+          >
+            Leave Room
+          </Button>
+        </div>
       </div>
 
       {/* Users Section */}
@@ -525,6 +543,63 @@ export default function Swipe({ room, user, onLeaveRoom }: SwipeProps) {
           </div>
         </div>
       )}
+
+      {/* Share Room Dialog */}
+      <Dialog open={isShareDialogOpen} onOpenChange={setIsShareDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <div className="text-center">
+            <div className="mx-auto flex items-center justify-center w-12 h-12 bg-blue-100 rounded-full mb-4">
+              <Share2 className="w-6 h-6 text-blue-600" />
+            </div>
+            <h2 className="text-xl font-semibold text-gray-900 mb-2">
+              Share Room
+            </h2>
+            <p className="text-gray-600 mb-6">
+              Share this link with friends to invite them to join your room!
+            </p>
+
+            <div className="bg-gray-50 rounded-lg p-4 mb-6">
+              <div className="text-sm text-gray-500 mb-2">Room Code</div>
+              <div className="font-mono text-lg font-bold text-gray-900">
+                {room.code}
+              </div>
+            </div>
+
+            <div className="bg-gray-50 rounded-lg p-4 mb-6">
+              <div className="text-sm text-gray-500 mb-2">Share Link</div>
+              <div className="font-mono text-sm text-gray-700 break-all">
+                {`${window.location.origin}/join/${room.code}`}
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <Button
+                onClick={handleCopyLink}
+                className="flex-1 flex items-center justify-center gap-2"
+                disabled={copiedToClipboard}
+              >
+                {copiedToClipboard ? (
+                  <>
+                    <Check className="w-4 h-4" />
+                    Copied!
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-4 h-4" />
+                    Copy Link
+                  </>
+                )}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setIsShareDialogOpen(false)}
+              >
+                Close
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

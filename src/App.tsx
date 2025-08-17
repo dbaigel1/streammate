@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import { useEffect } from "react";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
+import JoinRoom from "./pages/JoinRoom";
 import { trackPageView } from "@/lib/analytics";
 
 const queryClient = new QueryClient();
@@ -30,6 +31,7 @@ const App = () => (
         <PageTracker />
         <Routes>
           <Route path="/" element={<Index />} />
+          <Route path="/join/:roomCode" element={<JoinRoom />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

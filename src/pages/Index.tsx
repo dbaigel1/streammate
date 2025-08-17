@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import RoomEntry from "@/components/RoomEntry";
 import Swipe from "./Swipe";
 import { socketService } from "@/services/socket";
@@ -7,6 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { ContentType } from "@/components/ContentTypeSelector";
 import { Room } from "@/types/show";
 import { User } from "../../server/src/types/index.js";
+import { trackUserJoinedRoom, trackCustomEvent } from "@/lib/analytics";
 
 // Local storage keys
 const ROOM_STORAGE_KEY = "streammate_room";
@@ -20,6 +21,7 @@ export default function Index() {
   const [contentType, setContentType] = useState<ContentType | null>(null);
   const [isRestoringRoom, setIsRestoringRoom] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
   const { toast } = useToast();
 
   // Save room state to localStorage
@@ -74,6 +76,100 @@ export default function Index() {
       console.error("Failed to clear room state from localStorage:", error);
     }
   };
+
+  // Handle navigation state for joining rooms via shareable links
+  useEffect(() => {
+    if (
+      location.state?.joinRoom &&
+      location.state?.roomCode &&
+      location.state?.username
+    ) {
+      console.log("Joining room via shareable link:", location.state);
+
+      // Create a temporary room and user for immediate display
+      const tempRoom: Room = {
+        id: location.state.roomCode,
+        code: location.state.roomCode,
+        users: [
+          { id: "temp", username: location.state.username, socketId: "temp" },
+        ],
+        swipes: [],
+        matches: [],
+        contentType: "tv", // Will be updated when we actually join
+        createdAt: new Date(),
+      };
+
+      const tempUser = {
+        id: "temp",
+        username: location.state.username,
+        socketId: "temp",
+      };
+
+      setRoom(tempRoom);
+      setUser(tempUser);
+      setContentType("tv");
+
+      // Save room state to localStorage
+      saveRoomState(tempRoom, tempUser, "tv");
+
+      // Clear the navigation state
+      navigate("/", { replace: true, state: {} });
+
+      // Actually join the room via socket after a short delay to ensure state is set
+      setTimeout(async () => {
+        try {
+          console.log(
+            "Attempting to join room via socket:",
+            location.state.roomCode
+          );
+          const result = await socketService.joinRoom(
+            location.state.roomCode,
+            location.state.username,
+            "tv"
+          );
+
+          if (result.error) {
+            console.error(
+              "Failed to join room via shareable link:",
+              result.error
+            );
+            // Clear the temporary state and show error
+            clearRoomState();
+            setRoom(null);
+            setUser(null);
+            setContentType(null);
+            toast({
+              title: "Failed to Join Room",
+              description: result.error,
+              variant: "destructive",
+            });
+          } else {
+            console.log("Successfully joined room via shareable link");
+            // Track successful join
+            trackUserJoinedRoom(location.state.roomCode, "tv");
+            trackCustomEvent("shareable_link_join_success", {
+              room_code: location.state.roomCode,
+              username: location.state.username,
+              join_method: "shareable_link",
+            });
+          }
+        } catch (error) {
+          console.error("Exception joining room via shareable link:", error);
+          // Clear the temporary state and show error
+          clearRoomState();
+          setRoom(null);
+          setUser(null);
+          setContentType(null);
+          toast({
+            title: "Failed to Join Room",
+            description:
+              "An error occurred while joining the room. Please try again.",
+            variant: "destructive",
+          });
+        }
+      }, 100);
+    }
+  }, [location.state, navigate]);
 
   useEffect(() => {
     console.log("=== INDEX USE_EFFECT RUNNING ===");

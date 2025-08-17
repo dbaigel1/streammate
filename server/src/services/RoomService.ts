@@ -240,6 +240,10 @@ export class RoomService {
     return this.rooms.get(roomCode) || null;
   }
 
+  roomExists(roomCode: string): boolean {
+    return this.rooms.has(roomCode);
+  }
+
   getUserRoom(userId: string): Room | null {
     const roomCode = this.userToRoom.get(userId);
     if (!roomCode) return null;

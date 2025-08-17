@@ -568,6 +568,18 @@ io.on("connection", (socket) => {
     }
   });
 
+  // New event handler for checking if room exists
+  socket.on("checkRoomExists", (data, callback) => {
+    try {
+      console.log("Client requested to check if room exists:", data.roomCode);
+      const roomExists = roomService.roomExists(data.roomCode);
+      callback({ exists: roomExists });
+    } catch (error) {
+      console.error("Error checking room existence:", error);
+      callback({ error: "Failed to check room existence" });
+    }
+  });
+
   socket.on("disconnect", () => {
     const { user, roomCode } = socket.data;
     if (user && roomCode) {

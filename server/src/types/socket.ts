@@ -25,6 +25,10 @@ export interface ClientToServerEvents {
   initializeRoomShows: (
     callback: (response: { shows: any[] } | { error: string }) => void
   ) => void;
+  checkRoomExists: (
+    data: { roomCode: string },
+    callback: (response: { exists: boolean } | { error: string }) => void
+  ) => void;
 }
 
 export interface ServerToClientEvents {
