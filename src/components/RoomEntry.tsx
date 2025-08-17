@@ -11,6 +11,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { socketService } from "@/services/socket";
 import ContentTypeSelector, { ContentType } from "./ContentTypeSelector";
+import { trackRoomCreated, trackUserJoinedRoom } from "@/lib/analytics";
 
 interface RoomEntryProps {
   onJoinRoom: (
@@ -60,6 +61,8 @@ export default function RoomEntry({
         setError(result.error);
       } else {
         console.log("Room created successfully:", result);
+        // Track room creation analytics
+        trackRoomCreated(contentType);
         setConnectionStatus("Room created successfully! Redirecting...");
         onJoinRoom(result.room.code, result.user.username, contentType);
       }
@@ -93,6 +96,8 @@ export default function RoomEntry({
         setError(result.error);
       } else {
         setConnectionStatus("Joined room successfully! Redirecting...");
+        // Track room joining analytics (we'll update contentType later)
+        trackUserJoinedRoom(roomCode.trim().toUpperCase(), "tv");
         // We'll get the actual contentType from the room when we join
         onJoinRoom(roomCode.trim().toUpperCase(), username.trim());
       }

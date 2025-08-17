@@ -13,6 +13,11 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { X } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { useToast } from "@/components/ui/use-toast";
+import {
+  trackMatchFound,
+  trackSwipe,
+  trackUserLeftRoom,
+} from "@/lib/analytics";
 
 interface SwipeProps {
   room: Room;
@@ -181,6 +186,13 @@ export default function Swipe({ room, user, onLeaveRoom }: SwipeProps) {
           description: "You and your friends matched on this show!",
         });
 
+        // Track match found analytics
+        trackMatchFound(
+          normalizedShowId,
+          data.matchedUsers,
+          room.contentType || "tv"
+        );
+
         // Fetch show details for the match
         try {
           console.log(
@@ -290,6 +302,9 @@ export default function Swipe({ room, user, onLeaveRoom }: SwipeProps) {
     // Emit swipe event with normalized showId
     socketService.swipe(normalizedShowId, direction);
 
+    // Track swipe analytics
+    trackSwipe(direction, room.contentType || "tv");
+
     // Move to next show after a short delay
     setTimeout(() => {
       setCurrentShowIndex((prev) => prev + 1);
@@ -298,6 +313,9 @@ export default function Swipe({ room, user, onLeaveRoom }: SwipeProps) {
   };
 
   const handleLeaveRoom = () => {
+    // Track user leaving room analytics
+    trackUserLeftRoom(room.code, room.contentType || "tv");
+
     socketService.leaveRoom();
     onLeaveRoom(); // Call the prop function to clear room state
   };
