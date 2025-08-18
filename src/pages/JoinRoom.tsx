@@ -11,12 +11,13 @@ import {
 } from "@/components/ui/card";
 import { socketService } from "@/services/socket";
 import { trackUserJoinedRoom, trackCustomEvent } from "@/lib/analytics";
-import { toast } from "react-hot-toast";
+import { useToast } from "@/hooks/use-toast";
 import { Loader2, Users, ArrowLeft } from "lucide-react";
 
 export default function JoinRoom() {
   const { roomCode } = useParams<{ roomCode: string }>();
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [username, setUsername] = useState("");
   const [isJoining, setIsJoining] = useState(false);
   const [error, setError] = useState("");
@@ -24,6 +25,10 @@ export default function JoinRoom() {
   const [roomExists, setRoomExists] = useState(true); // Assume room exists initially
 
   useEffect(() => {
+    console.log("JoinRoom component mounted with roomCode:", roomCode);
+    console.log("Current URL:", window.location.href);
+    console.log("Room code from params:", roomCode);
+
     if (roomCode) {
       // Skip validation for now - just assume the room exists
       // This will be validated when they actually try to join
@@ -34,6 +39,10 @@ export default function JoinRoom() {
         room_code: roomCode,
         referrer: document.referrer || "direct_link",
       });
+
+      console.log("Successfully set up join room for code:", roomCode);
+    } else {
+      console.error("No room code found in URL params");
     }
   }, [roomCode]);
 

@@ -439,7 +439,9 @@ class SocketService {
     });
   }
 
-  public async getNetflixContent(): Promise<any[]> {
+  public async getNetflixContent(
+    contentType?: "movies" | "tv"
+  ): Promise<any[]> {
     return new Promise((resolve, reject) => {
       if (!this.socket?.connected) {
         reject(new Error("Socket not connected"));
@@ -448,6 +450,7 @@ class SocketService {
 
       this.socket.emit(
         "getNetflixContent",
+        { contentType },
         (response: { shows: any[] } | { error: string }) => {
           if ("error" in response) {
             reject(new Error(response.error));
@@ -461,7 +464,7 @@ class SocketService {
 
   public async getShowDetails(
     showId: string,
-    contentType: string
+    contentType?: string
   ): Promise<any> {
     return new Promise((resolve, reject) => {
       if (!this.socket?.connected) {
@@ -485,7 +488,7 @@ class SocketService {
 
   public async getDetailedShowInfo(
     showId: string,
-    contentType: string
+    contentType?: string
   ): Promise<any> {
     return new Promise((resolve, reject) => {
       if (!this.socket?.connected) {

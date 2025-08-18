@@ -112,19 +112,25 @@ export default function Index() {
       // Save room state to localStorage
       saveRoomState(tempRoom, tempUser, "tv");
 
+      // Store the values before clearing navigation state
+      const roomCodeToJoin = location.state.roomCode;
+      const usernameToJoin = location.state.username;
+
+      console.log("Stored values for room joining:", {
+        roomCode: roomCodeToJoin,
+        username: usernameToJoin,
+      });
+
       // Clear the navigation state
       navigate("/", { replace: true, state: {} });
 
       // Actually join the room via socket after a short delay to ensure state is set
       setTimeout(async () => {
         try {
-          console.log(
-            "Attempting to join room via socket:",
-            location.state.roomCode
-          );
+          console.log("Attempting to join room via socket:", roomCodeToJoin);
           const result = await socketService.joinRoom(
-            location.state.roomCode,
-            location.state.username,
+            roomCodeToJoin,
+            usernameToJoin,
             "tv"
           );
 
@@ -146,10 +152,10 @@ export default function Index() {
           } else {
             console.log("Successfully joined room via shareable link");
             // Track successful join
-            trackUserJoinedRoom(location.state.roomCode, "tv");
+            trackUserJoinedRoom(roomCodeToJoin, "tv");
             trackCustomEvent("shareable_link_join_success", {
-              room_code: location.state.roomCode,
-              username: location.state.username,
+              room_code: roomCodeToJoin,
+              username: usernameToJoin,
               join_method: "shareable_link",
             });
           }

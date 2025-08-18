@@ -11,8 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Loader2, Share2, Copy, Check } from "lucide-react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { X } from "lucide-react";
-import { toast } from "react-hot-toast";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/hooks/use-toast";
 import {
   trackMatchFound,
   trackSwipe,
@@ -59,10 +58,63 @@ export default function Swipe({ room, user, onLeaveRoom }: SwipeProps) {
     );
   }, []);
 
+  // Update roomUsers when room.users changes (e.g., after joining via shareable link)
+  useEffect(() => {
+    console.log("Room prop users changed, updating roomUsers state:", {
+      roomUsers: roomUsers.map((u) => ({ id: u.id, username: u.username })),
+      roomPropUsers: room.users.map((u) => ({
+        id: u.id,
+        username: u.username,
+      })),
+    });
+
+    // Only update if the room.users has more users than our current state
+    // This prevents overwriting the server's authoritative user list
+    if (room.users.length > roomUsers.length) {
+      console.log("Updating roomUsers from room prop:", room.users);
+      setRoomUsers(room.users);
+    }
+  }, [room.users, roomUsers.length]);
+
   useEffect(() => {
     // Note: Room joining is now handled in the Index page for shareable links
     // This prevents duplicate join attempts that could cause errors
     console.log("Swipe component mounted, user already in room:", room.code);
+
+    // If this user came via shareable link, they may still be a temporary user.
+    // Ensure they actually join the socket room immediately to avoid missing events.
+    const ensureJoined = async () => {
+      try {
+        const isTempUser = user.id === "temp" || user.socketId === "temp";
+        if (isTempUser) {
+          console.log("Detected temp user; joining room now:", {
+            roomCode: room.code,
+            username: user.username,
+            contentType: room.contentType,
+          });
+          await socketService.joinRoom(
+            room.code,
+            user.username,
+            room.contentType
+          );
+          console.log("Temp user successfully joined room:", room.code);
+        }
+      } catch (error) {
+        console.error(
+          "Failed to ensure room join from Swipe component:",
+          error
+        );
+      }
+    };
+    ensureJoined();
+
+    // Request current room state from server to ensure we have the latest data
+    const currentSocket = socketService.getSocket();
+    if (currentSocket) {
+      console.log("Requesting current room state from server...");
+      // Emit a custom event to request room state (server will respond with roomStateUpdate)
+      currentSocket.emit("requestRoomState", { roomCode: room.code });
+    }
 
     // Load shows when component mounts
     loadShows();
@@ -105,7 +157,13 @@ export default function Swipe({ room, user, onLeaveRoom }: SwipeProps) {
           "New room users:",
           data.users.map((u) => ({ id: u.id, username: u.username }))
         );
+
+        // Always update with the server's authoritative user list
+        console.log("Updating roomUsers with server data:", data.users);
         setRoomUsers(data.users);
+
+        // Also log the current state after update
+        console.log("roomUsers state updated, new count:", data.users.length);
       }
     );
 
@@ -184,8 +242,7 @@ export default function Swipe({ room, user, onLeaveRoom }: SwipeProps) {
             normalizedShowId
           );
           const showDetails = await socketService.getShowDetails(
-            normalizedShowId,
-            room.contentType
+            normalizedShowId
           );
           console.log("Client: Received show details:", {
             id: showDetails.id,
@@ -252,8 +309,13 @@ export default function Swipe({ room, user, onLeaveRoom }: SwipeProps) {
       console.error("Error loading synchronized shows:", error);
       // Fallback to individual loading if room sync fails
       try {
-        console.log("Client: Falling back to individual show loading...");
-        const netflixShows = await socketService.getNetflixContent();
+        console.log(
+          "Client: Falling back to individual show loading with contentType:",
+          room.contentType || "tv"
+        );
+        const netflixShows = await socketService.getNetflixContent(
+          room.contentType || "tv"
+        );
         setShows(netflixShows);
         setCurrentShowIndex(0);
       } catch (fallbackError) {

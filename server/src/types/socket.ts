@@ -12,14 +12,15 @@ export interface ClientToServerEvents {
   leaveRoom: () => void;
   swipe: (data: { showId: string; direction: "left" | "right" }) => void;
   getNetflixContent: (
+    data: { contentType?: "movies" | "tv" },
     callback: (response: { shows: any[] } | { error: string }) => void
   ) => void;
   getShowDetails: (
-    data: { showId: string; contentType: string },
+    data: { showId: string; contentType?: string },
     callback: (response: { show: any } | { error: string }) => void
   ) => void;
   getDetailedShowInfo: (
-    data: { showId: string; contentType: string },
+    data: { showId: string; contentType?: string },
     callback: (response: { show: any } | { error: string }) => void
   ) => void;
   initializeRoomShows: (
@@ -29,6 +30,7 @@ export interface ClientToServerEvents {
     data: { roomCode: string },
     callback: (response: { exists: boolean } | { error: string }) => void
   ) => void;
+  requestRoomState: (data: { roomCode: string }) => void;
 }
 
 export interface ServerToClientEvents {

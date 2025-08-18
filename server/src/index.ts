@@ -470,10 +470,17 @@ io.on("connection", (socket) => {
   });
 
   // New event handler for getting Netflix content
-  socket.on("getNetflixContent", async (callback) => {
+  socket.on("getNetflixContent", async (data, callback) => {
     try {
-      console.log("Client requested Netflix content");
-      const shows = await tmdbService.getNetflixContent();
+      console.log(
+        "Client requested Netflix content",
+        data?.contentType
+          ? `(contentType: ${data.contentType})`
+          : "(no contentType)"
+      );
+      const shows = await tmdbService.getNetflixContent(
+        (data?.contentType as "movies" | "tv") || undefined
+      );
       callback({ shows });
     } catch (error) {
       console.error("Error getting Netflix content:", error);
@@ -539,7 +546,7 @@ io.on("connection", (socket) => {
       );
       const show = await tmdbService.getDetailedShowInfo(
         data.showId,
-        data.contentType as "movies" | "tv"
+        (data.contentType as "movies" | "tv") || undefined
       );
       callback({ show });
     } catch (error) {
@@ -559,7 +566,7 @@ io.on("connection", (socket) => {
       );
       const show = await tmdbService.getShowDetails(
         data.showId,
-        data.contentType as "movies" | "tv"
+        (data.contentType as "movies" | "tv") || undefined
       );
       callback({ show });
     } catch (error) {
@@ -577,6 +584,29 @@ io.on("connection", (socket) => {
     } catch (error) {
       console.error("Error checking room existence:", error);
       callback({ error: "Failed to check room existence" });
+    }
+  });
+
+  socket.on("requestRoomState", (data) => {
+    try {
+      console.log("Client requested room state:", data.roomCode);
+      const room = roomService.getRoom(data.roomCode);
+      if (room) {
+        console.log("Sending room state to client:", {
+          users: room.users.map((u) => ({ id: u.id, username: u.username })),
+          roomCode: room.code,
+          contentType: room.contentType,
+        });
+        socket.emit("roomStateUpdate", {
+          users: room.users,
+          roomCode: room.code,
+          contentType: room.contentType,
+        });
+      } else {
+        console.log("Room not found for state request:", data.roomCode);
+      }
+    } catch (error) {
+      console.error("Error handling room state request:", error);
     }
   });
 
