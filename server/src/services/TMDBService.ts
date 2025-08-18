@@ -174,55 +174,71 @@ export class TMDBService {
       let allShows: Show[] = [];
 
       if (!contentType || contentType === "movies") {
-        // Get movies available on Netflix
-        const moviesUrl = `${this.BASE_URL}/discover/movie?api_key=${this.API_KEY}&with_watch_providers=${this.NETFLIX_PROVIDER_ID}&watch_region=US&sort_by=popularity.desc`;
-        const moviesData = await this.fetchWithCache<TMDBResponse>(moviesUrl);
+        // Get movies available on Netflix (fetch multiple pages)
+        let allMovies: any[] = [];
+        for (let page = 1; page <= 20; page++) {
+          // Fetch 20 pages to get ~400 movies
+          const moviesUrl = `${this.BASE_URL}/discover/movie?api_key=${this.API_KEY}&with_watch_providers=${this.NETFLIX_PROVIDER_ID}&watch_region=US&sort_by=popularity.desc&page=${page}`;
+          const moviesData = await this.fetchWithCache<TMDBResponse>(moviesUrl);
+          allMovies.push(...moviesData.results);
+
+          // Stop if we've reached the desired amount or if no more results
+          if (moviesData.results.length === 0 || allMovies.length >= 400) {
+            break;
+          }
+        }
 
         console.log("Server: Raw TMDB API responses:", {
-          moviesCount: moviesData.results.length,
-          firstMovie: moviesData.results[0]
+          moviesCount: allMovies.length,
+          firstMovie: allMovies[0]
             ? {
-                id: moviesData.results[0].id,
-                title: (moviesData.results[0] as TMDBMovie).title,
+                id: allMovies[0].id,
+                title: (allMovies[0] as TMDBMovie).title,
                 overview:
-                  (moviesData.results[0] as TMDBMovie).overview?.substring(
-                    0,
-                    100
-                  ) + "...",
+                  (allMovies[0] as TMDBMovie).overview?.substring(0, 100) +
+                  "...",
               }
             : null,
         });
 
-        allShows.push(...moviesData.results.map(this.convertToShow));
+        allShows.push(...allMovies.map(this.convertToShow));
       }
 
       if (!contentType || contentType === "tv") {
-        // Get TV shows available on Netflix
-        const tvUrl = `${this.BASE_URL}/discover/tv?api_key=${this.API_KEY}&with_watch_providers=${this.NETFLIX_PROVIDER_ID}&watch_region=US&sort_by=popularity.desc`;
-        const tvData = await this.fetchWithCache<TMDBResponse>(tvUrl);
+        // Get TV shows available on Netflix (fetch multiple pages)
+        let allTVShows: any[] = [];
+        for (let page = 1; page <= 20; page++) {
+          // Fetch 20 pages to get ~400 TV shows
+          const tvUrl = `${this.BASE_URL}/discover/tv?api_key=${this.API_KEY}&with_watch_providers=${this.NETFLIX_PROVIDER_ID}&watch_region=US&sort_by=popularity.desc&page=${page}`;
+          const tvData = await this.fetchWithCache<TMDBResponse>(tvUrl);
+          allTVShows.push(...tvData.results);
+
+          // Stop if we've reached the desired amount or if no more results
+          if (tvData.results.length === 0 || allTVShows.length >= 400) {
+            break;
+          }
+        }
 
         console.log("Server: Raw TMDB API responses:", {
-          tvCount: tvData.results.length,
-          firstTV: tvData.results[0]
+          tvCount: allTVShows.length,
+          firstTV: allTVShows[0]
             ? {
-                id: tvData.results[0].id,
-                name: (tvData.results[0] as TMDBTVShow).name,
+                id: allTVShows[0].id,
+                name: (allTVShows[0] as TMDBTVShow).name,
                 overview:
-                  (tvData.results[0] as TMDBTVShow).overview?.substring(
-                    0,
-                    100
-                  ) + "...",
+                  (allTVShows[0] as TMDBTVShow).overview?.substring(0, 100) +
+                  "...",
               }
             : null,
         });
 
-        allShows.push(...tvData.results.map(this.convertToShow));
+        allShows.push(...allTVShows.map(this.convertToShow));
       }
 
-      // Sort by popularity (rating) and limit to 100 shows
+      // Sort by popularity (rating) and limit to 400 shows
       const sortedShows = allShows
         .sort((a, b) => b.vote_average - a.vote_average)
-        .slice(0, 100);
+        .slice(0, 400);
 
       console.log(
         `Server: Retrieved ${sortedShows.length} Netflix ${
