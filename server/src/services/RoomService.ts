@@ -43,10 +43,25 @@ export class RoomService {
     username: string,
     socketId: string
   ): { room: Room; user: User } | null {
+    console.log("RoomService: Attempting to join room:", {
+      roomCode,
+      username,
+      socketId,
+      totalRooms: this.rooms.size,
+      roomKeys: Array.from(this.rooms.keys()),
+    });
+
     const room = this.rooms.get(roomCode);
     if (!room) {
+      console.log("RoomService: Room not found:", roomCode);
       return null;
     }
+
+    console.log("RoomService: Found room:", {
+      roomCode: room.code,
+      userCount: room.users.length,
+      existingUsernames: room.users.map((u) => u.username),
+    });
 
     // Check if this socket is reconnecting
     const existingUserId = this.socketToUser.get(socketId);
@@ -61,7 +76,14 @@ export class RoomService {
     }
 
     // Check if username is already taken in the room
+    console.log("RoomService: Checking username conflict:", {
+      requestedUsername: username,
+      existingUsernames: room.users.map((u) => u.username),
+      hasConflict: room.users.some((u: User) => u.username === username),
+    });
+
     if (room.users.some((u: User) => u.username === username)) {
+      console.log("RoomService: Username conflict detected:", username);
       throw new Error("Username is already taken in this room");
     }
 
