@@ -2,9 +2,8 @@ import { io, Socket } from "socket.io-client";
 import {
   ClientToServerEvents,
   ServerToClientEvents,
-  Room,
-  User,
-} from "../../server/src/types/index.js";
+} from "../../server/src/types/socket.js";
+import { Room, User } from "../../server/src/types/index.js";
 
 class SocketService {
   private socket: Socket<ServerToClientEvents, ClientToServerEvents> | null =
@@ -19,7 +18,7 @@ class SocketService {
 
   private constructor() {
     const socketUrl =
-      import.meta.env.VITE_SOCKET_URL || "http://localhost:3001";
+      import.meta.env.VITE_SOCKET_URL || "https://streammate-w09v.onrender.com";
     console.log("=== SOCKET SERVICE CONSTRUCTOR CALLED ===");
     console.log("Socket URL:", socketUrl);
     console.log("Stack trace:", new Error().stack);
