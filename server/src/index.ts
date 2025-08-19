@@ -35,6 +35,8 @@ const httpServer = createServer(app);
 const allowedOrigins = [
   process.env.CLIENT_URL || "http://localhost:5173",
   "https://streammate.netlify.app",
+  "https://streammate.com", // Add your custom domain here
+  "https://www.streammate.com", // Add www version too
   "http://localhost:5173",
   "http://localhost:8080",
   "http://localhost:8081",

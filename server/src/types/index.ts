@@ -14,6 +14,7 @@ export interface Show {
   vote_average: number;
   type: "movie" | "tv";
   streamingService: string;
+  genres?: Array<{ id: number; name: string }>;
 }
 
 export interface Room {

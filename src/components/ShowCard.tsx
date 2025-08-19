@@ -94,40 +94,42 @@ const ShowCard: React.FC<ShowCardProps> = ({
           <div className="flex items-start justify-between">
             <div>
               <h2 className="text-2xl font-bold text-gray-900">{show.title}</h2>
-              <div className="flex items-center space-x-2 mt-1">
+              <div className="flex flex-wrap items-center gap-2 mt-1">
                 <span className="flex items-center text-sm text-gray-600">
                   <Calendar className="w-4 h-4 mr-1" />
                   {new Date(show.release_date).getFullYear()}
                 </span>
-                <span className="text-gray-400">•</span>
+                <span className="text-gray-400 hidden sm:inline">•</span>
                 <span className="flex items-center text-sm text-gray-600">
                   <Star className="w-4 h-4 mr-1 text-yellow-400" />
                   {show.vote_average.toFixed(1)}
                 </span>
+                {show.genres && show.genres.length > 0 && (
+                  <>
+                    <span className="text-gray-400 hidden sm:inline">•</span>
+                    <div className="flex flex-wrap items-center gap-1 text-sm text-gray-600">
+                      <span className="mr-1">🎭</span>
+                      {show.genres.slice(0, 3).map((genre, index) => (
+                        <span key={genre.id} className="whitespace-nowrap">
+                          {genre.name}
+                          {index < Math.min(show.genres.length, 3) - 1 && (
+                            <span className="text-gray-400 mx-1">,</span>
+                          )}
+                        </span>
+                      ))}
+                      {show.genres.length > 3 && (
+                        <span className="text-gray-500">
+                          +{show.genres.length - 3} more
+                        </span>
+                      )}
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           </div>
 
           <p className="text-gray-600 line-clamp-3">{show.overview}</p>
-
-          {/* Genres preview */}
-          {show.genres && show.genres.length > 0 && (
-            <div className="flex flex-wrap gap-1">
-              {show.genres.slice(0, 3).map((genre) => (
-                <span
-                  key={genre.id}
-                  className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded"
-                >
-                  {genre.name}
-                </span>
-              ))}
-              {show.genres.length > 3 && (
-                <span className="text-xs text-gray-500">
-                  +{show.genres.length - 3} more
-                </span>
-              )}
-            </div>
-          )}
 
           <div className="flex justify-center space-x-4 pt-4">
             <button

@@ -31,6 +31,12 @@ export class TMDBService {
   private readonly NETFLIX_PROVIDER_ID = 8; // Netflix's ID in TMDB
   private cache: Map<string, { data: any; timestamp: number }> = new Map();
   private readonly CACHE_DURATION = 1000 * 60 * 60; // 1 hour
+  private readonly SHOWS_CACHE_DURATION = 1000 * 60 * 60 * 24; // 24 hours
+  private showsCache: {
+    data: Show[];
+    timestamp: number;
+    contentType?: string;
+  } | null = null;
 
   private constructor() {
     const apiKey = process.env.TMDB_API_KEY;
@@ -171,6 +177,23 @@ export class TMDBService {
         } from server cache...`
       );
 
+      // Check if we have cached shows data that's still valid
+      if (
+        this.showsCache &&
+        Date.now() - this.showsCache.timestamp < this.SHOWS_CACHE_DURATION &&
+        this.showsCache.contentType === contentType
+      ) {
+        console.log(
+          "Server: Using cached shows data (age:",
+          Math.round(
+            (Date.now() - this.showsCache.timestamp) / (1000 * 60 * 60)
+          ),
+          "hours)"
+        );
+        return this.showsCache.data;
+      }
+
+      console.log("Server: Fetching fresh shows data from TMDB...");
       let allShows: Show[] = [];
 
       if (!contentType || contentType === "movies") {
@@ -201,7 +224,30 @@ export class TMDBService {
             : null,
         });
 
-        allShows.push(...allMovies.map(this.convertToShow));
+        // Convert movies to shows and fetch genres
+        for (const movie of allMovies) {
+          const show = this.convertToShow(movie);
+          // Fetch genres for this movie
+          try {
+            const movieDetailsUrl = `${this.BASE_URL}/movie/${movie.id}?api_key=${this.API_KEY}`;
+            const movieDetails = await this.fetchWithCache<any>(
+              movieDetailsUrl
+            );
+            show.genres = movieDetails.genres || [];
+            console.log(
+              `Server: Fetched genres for movie ${movie.id}:`,
+              show.genres?.length || 0,
+              "genres"
+            );
+          } catch (error) {
+            console.log(
+              `Server: Failed to fetch genres for movie ${movie.id}:`,
+              error
+            );
+            show.genres = [];
+          }
+          allShows.push(show);
+        }
       }
 
       if (!contentType || contentType === "tv") {
@@ -232,7 +278,28 @@ export class TMDBService {
             : null,
         });
 
-        allShows.push(...allTVShows.map(this.convertToShow));
+        // Convert TV shows to shows and fetch genres
+        for (const tvShow of allTVShows) {
+          const show = this.convertToShow(tvShow);
+          // Fetch genres for this TV show
+          try {
+            const tvDetailsUrl = `${this.BASE_URL}/tv/${tvShow.id}?api_key=${this.API_KEY}`;
+            const tvDetails = await this.fetchWithCache<any>(tvDetailsUrl);
+            show.genres = tvDetails.genres || [];
+            console.log(
+              `Server: Fetched genres for TV show ${tvShow.id}:`,
+              show.genres?.length || 0,
+              "genres"
+            );
+          } catch (error) {
+            console.log(
+              `Server: Failed to fetch genres for TV show ${tvShow.id}:`,
+              error
+            );
+            show.genres = [];
+          }
+          allShows.push(show);
+        }
       }
 
       // Sort by popularity (rating) and limit to 400 shows
@@ -244,6 +311,19 @@ export class TMDBService {
         `Server: Retrieved ${sortedShows.length} Netflix ${
           contentType || "shows"
         } (${allShows.length} total)`
+      );
+
+      // Cache the results for 24 hours
+      this.showsCache = {
+        data: sortedShows,
+        timestamp: Date.now(),
+        contentType: contentType,
+      };
+
+      console.log(
+        `Server: Cached ${sortedShows.length} shows for 24 hours (${
+          contentType || "all content"
+        })`
       );
 
       // Log first few shows for debugging
@@ -525,7 +605,16 @@ export class TMDBService {
   // Method to manually clear cache (useful for testing or admin purposes)
   public clearCache(): void {
     this.cache.clear();
+    this.showsCache = null;
     console.log("Server: TMDB cache cleared");
+  }
+
+  // Method to manually refresh shows cache
+  public async refreshShowsCache(contentType?: "movies" | "tv"): Promise<void> {
+    console.log("Server: Manually refreshing shows cache...");
+    this.showsCache = null;
+    await this.getNetflixContent(contentType);
+    console.log("Server: Shows cache refreshed successfully");
   }
 
   // Method to get cache status
