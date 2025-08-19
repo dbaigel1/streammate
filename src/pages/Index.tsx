@@ -124,10 +124,31 @@ export default function Index() {
       // Clear the navigation state
       navigate("/", { replace: true, state: {} });
 
-      // Actually join the room via socket after a short delay to ensure state is set
+      // Actually join the room via socket after ensuring socket is connected
       setTimeout(async () => {
         try {
-          console.log("Attempting to join room via socket:", roomCodeToJoin);
+          console.log("Ensuring socket is connected before joining room...");
+          console.log("Current socket status:", {
+            connected: socketService.getSocket()?.connected,
+            id: socketService.getSocket()?.id,
+            transport: socketService.getSocket()?.io?.engine?.transport?.name,
+          });
+
+          await socketService.connect();
+
+          console.log(
+            "Socket connected, now attempting to join room:",
+            roomCodeToJoin
+          );
+          console.log("Socket status after connect:", {
+            connected: socketService.getSocket()?.connected,
+            id: socketService.getSocket()?.id,
+            transport: socketService.getSocket()?.io?.engine?.transport?.name,
+          });
+
+          // Small delay to ensure socket is fully ready
+          await new Promise((resolve) => setTimeout(resolve, 100));
+
           const result = await socketService.joinRoom(
             roomCodeToJoin,
             usernameToJoin,

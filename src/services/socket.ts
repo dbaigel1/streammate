@@ -297,7 +297,16 @@ class SocketService {
     contentType: string
   ): Promise<{ error?: string }> {
     return new Promise((resolve, reject) => {
+      console.log("joinRoom called with:", { roomCode, username, contentType });
+      console.log("Socket status in joinRoom:", {
+        socketExists: !!this.socket,
+        connected: this.socket?.connected,
+        id: this.socket?.id,
+        transport: this.socket?.io?.engine?.transport?.name,
+      });
+
       if (!this.socket?.connected) {
+        console.error("Socket not connected in joinRoom, rejecting");
         reject(new Error("Socket not connected"));
         return;
       }
