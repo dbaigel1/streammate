@@ -1,6 +1,11 @@
-import React from "react";
+import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { toast } from "react-hot-toast";
+
+interface StreamingPlatformsProps {
+  selectedPlatform: "netflix" | "hulu";
+  onPlatformChange: (platform: "netflix" | "hulu") => void;
+}
 
 interface StreamingPlatform {
   id: string;
@@ -22,8 +27,8 @@ const platforms: StreamingPlatform[] = [
     id: "hulu",
     name: "Hulu",
     icon: "🟢",
-    available: false,
-    color: "bg-green-400 hover:bg-green-500 text-white border-green-400",
+    available: true,
+    color: "bg-green-600 hover:bg-green-700 text-white",
   },
   {
     id: "hbo",
@@ -41,7 +46,10 @@ const platforms: StreamingPlatform[] = [
   },
 ];
 
-export default function StreamingPlatforms() {
+export default function StreamingPlatforms({
+  selectedPlatform,
+  onPlatformChange,
+}: StreamingPlatformsProps) {
   const handlePlatformClick = (platform: StreamingPlatform) => {
     if (!platform.available) {
       toast("Coming soon! 🚀", {
@@ -54,6 +62,13 @@ export default function StreamingPlatforms() {
           padding: "0.5rem 1rem",
         },
       });
+      return;
+    }
+
+    // Toggle between Netflix and Hulu
+    if (platform.id === "netflix" || platform.id === "hulu") {
+      const newPlatform = platform.id as "netflix" | "hulu";
+      onPlatformChange(newPlatform);
     }
   };
 
@@ -70,7 +85,9 @@ export default function StreamingPlatforms() {
             size="sm"
             className={`flex items-center gap-2 transition-all duration-200 ${
               platform.available
-                ? platform.color
+                ? platform.id === selectedPlatform
+                  ? platform.color
+                  : "bg-gray-200 hover:bg-gray-300 text-gray-700"
                 : `${platform.color} cursor-not-allowed`
             }`}
             onClick={() => handlePlatformClick(platform)}
@@ -78,7 +95,7 @@ export default function StreamingPlatforms() {
           >
             <span className="text-lg">{platform.icon}</span>
             <span className="text-xs font-medium">{platform.name}</span>
-            {platform.available && (
+            {platform.available && platform.id === selectedPlatform && (
               <span className="text-xs bg-white/20 px-1.5 py-0.5 rounded-full">
                 Active
               </span>
@@ -87,7 +104,8 @@ export default function StreamingPlatforms() {
         ))}
       </div>
       <p className="text-xs text-gray-500 mt-2">
-        More platforms coming soon! Currently showing Netflix content.
+        More platforms coming soon! Currently showing{" "}
+        {selectedPlatform === "netflix" ? "Netflix" : "Hulu"} content.
       </p>
     </div>
   );

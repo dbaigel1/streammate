@@ -471,6 +471,27 @@ io.on("connection", (socket) => {
     }
   });
 
+  // New event handler for getting streaming content
+  socket.on("getStreamingContent", async (data, callback) => {
+    try {
+      console.log(
+        "Client requested streaming content",
+        data?.platform ? `(platform: ${data.platform})` : "(no platform)",
+        data?.contentType
+          ? `(contentType: ${data.contentType})`
+          : "(no contentType)"
+      );
+      const shows = await tmdbService.getStreamingContent(
+        (data?.platform as "netflix" | "hulu") || "netflix",
+        (data?.contentType as "movies" | "tv") || undefined
+      );
+      callback({ shows });
+    } catch (error) {
+      console.error("Error getting streaming content:", error);
+      callback({ error: "Failed to get streaming content" });
+    }
+  });
+
   // New event handler for getting Netflix content
   socket.on("getNetflixContent", async (data, callback) => {
     try {
@@ -513,8 +534,8 @@ io.on("connection", (socket) => {
 
       console.log("Room contentType:", room.contentType);
 
-      // Check if room already has shows
-      let roomShows = roomService.getRoomShows(roomCode);
+      // Check if room already has shows for the current platform (default to netflix for backward compatibility)
+      let roomShows = roomService.getRoomShows(roomCode, "netflix");
 
       if (!roomShows) {
         // Generate new show list for this room with the correct content type
@@ -524,8 +545,11 @@ io.on("connection", (socket) => {
           "contentType:",
           room.contentType
         );
-        roomShows = await tmdbService.getNetflixContent(room.contentType);
-        roomService.setRoomShows(roomCode, roomShows);
+        roomShows = await tmdbService.getStreamingContent(
+          "netflix",
+          room.contentType
+        );
+        roomService.setRoomShows(roomCode, "netflix", roomShows);
       } else {
         console.log("Using existing show list for room:", roomCode);
       }
@@ -651,6 +675,20 @@ io.on("connection", (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
+
+// Pre-load all platforms on server startup
+async function initializeServer() {
+  try {
+    console.log("Server: Starting up and pre-loading all platforms...");
+    await tmdbService.preloadAllPlatforms();
+    console.log("Server: All platforms pre-loaded successfully!");
+  } catch (error) {
+    console.error("Server: Error during startup pre-loading:", error);
+  }
+}
+
 httpServer.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+  // Start pre-loading after server is listening
+  initializeServer();
 });

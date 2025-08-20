@@ -11,6 +11,10 @@ export interface ClientToServerEvents {
   ) => void;
   leaveRoom: () => void;
   swipe: (data: { showId: string; direction: "left" | "right" }) => void;
+  getStreamingContent: (
+    data: { platform: "netflix" | "hulu"; contentType?: "movies" | "tv" },
+    callback: (response: { shows: any[] } | { error: string }) => void
+  ) => void;
   getNetflixContent: (
     data: { contentType?: "movies" | "tv" },
     callback: (response: { shows: any[] } | { error: string }) => void

@@ -5,7 +5,7 @@ export class RoomService {
   private rooms: Map<string, Room> = new Map();
   private userToRoom: Map<string, string> = new Map(); // userId -> roomCode
   private socketToUser: Map<string, string> = new Map(); // socketId -> userId
-  private roomShows: Map<string, any[]> = new Map(); // Store show list per room
+  private roomShows: Map<string, Map<string, any[]>> = new Map(); // Store show list per room and platform
 
   createRoom(
     username: string,
@@ -244,18 +244,37 @@ export class RoomService {
     return { isMatch: false };
   }
 
-  public setRoomShows(roomCode: string, shows: any[]): void {
-    this.roomShows.set(roomCode, shows);
-    console.log(`RoomService: Set ${shows.length} shows for room ${roomCode}`);
+  public setRoomShows(roomCode: string, platform: string, shows: any[]): void {
+    if (!this.roomShows.has(roomCode)) {
+      this.roomShows.set(roomCode, new Map());
+    }
+    this.roomShows.get(roomCode)!.set(platform, shows);
+    console.log(
+      `RoomService: Set ${shows.length} shows for room ${roomCode} on platform ${platform}`
+    );
   }
 
-  public getRoomShows(roomCode: string): any[] | null {
-    return this.roomShows.get(roomCode) || null;
+  public getRoomShows(roomCode: string, platform: string): any[] | null {
+    const roomPlatformShows = this.roomShows.get(roomCode);
+    if (!roomPlatformShows) return null;
+    return roomPlatformShows.get(platform) || null;
   }
 
-  public clearRoomShows(roomCode: string): void {
-    this.roomShows.delete(roomCode);
-    console.log(`RoomService: Cleared shows for room ${roomCode}`);
+  public clearRoomShows(roomCode: string, platform?: string): void {
+    if (platform) {
+      // Clear shows for specific platform
+      const roomPlatformShows = this.roomShows.get(roomCode);
+      if (roomPlatformShows) {
+        roomPlatformShows.delete(platform);
+        console.log(
+          `RoomService: Cleared shows for room ${roomCode} on platform ${platform}`
+        );
+      }
+    } else {
+      // Clear all shows for room
+      this.roomShows.delete(roomCode);
+      console.log(`RoomService: Cleared all shows for room ${roomCode}`);
+    }
   }
 
   getRoom(roomCode: string): Room | null {

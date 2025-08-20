@@ -44,6 +44,9 @@ export default function Swipe({ room, user, onLeaveRoom }: SwipeProps) {
   const [isMatchesExpanded, setIsMatchesExpanded] = useState(false); // Start collapsed on mobile
   const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
   const [copiedToClipboard, setCopiedToClipboard] = useState(false);
+  const [selectedPlatform, setSelectedPlatform] = useState<"netflix" | "hulu">(
+    "netflix"
+  );
 
   useEffect(() => {
     // Log initial room users state
@@ -313,10 +316,11 @@ export default function Swipe({ room, user, onLeaveRoom }: SwipeProps) {
           "Client: Falling back to individual show loading with contentType:",
           room.contentType || "tv"
         );
-        const netflixShows = await socketService.getNetflixContent(
+        const streamingShows = await socketService.getStreamingContent(
+          selectedPlatform,
           room.contentType || "tv"
         );
-        setShows(netflixShows);
+        setShows(streamingShows);
         setCurrentShowIndex(0);
       } catch (fallbackError) {
         console.error("Fallback loading also failed:", fallbackError);
@@ -369,6 +373,30 @@ export default function Swipe({ room, user, onLeaveRoom }: SwipeProps) {
   const handleCloseMatch = () => {
     setIsMatchDialogOpen(false);
     setCurrentMatch(null);
+  };
+
+  const handlePlatformChange = async (platform: "netflix" | "hulu") => {
+    setSelectedPlatform(platform);
+    // Clear current shows and reload with new platform
+    setShows([]);
+    setCurrentShowIndex(0);
+    setIsLoadingShows(true);
+
+    try {
+      // Get content from server cache (should be instant since it's pre-loaded)
+      const streamingShows = await socketService.getStreamingContent(
+        platform,
+        room.contentType || "tv"
+      );
+      setShows(streamingShows);
+      setCurrentShowIndex(0);
+    } catch (error) {
+      console.error("Error loading shows for platform:", platform, error);
+      // Fallback to room initialization
+      loadShows();
+    } finally {
+      setIsLoadingShows(false);
+    }
   };
 
   const handleShareRoom = () => {
@@ -428,7 +456,10 @@ export default function Swipe({ room, user, onLeaveRoom }: SwipeProps) {
 
       {/* Streaming Platforms Section */}
       <div className="mb-6 sm:mb-8">
-        <StreamingPlatforms />
+        <StreamingPlatforms
+          selectedPlatform={selectedPlatform}
+          onPlatformChange={handlePlatformChange}
+        />
       </div>
 
       <div className="relative min-h-[500px] sm:min-h-[600px] mb-4">

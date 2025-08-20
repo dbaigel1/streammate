@@ -447,7 +447,8 @@ class SocketService {
     });
   }
 
-  public async getNetflixContent(
+  public async getStreamingContent(
+    platform: "netflix" | "hulu",
     contentType?: "movies" | "tv"
   ): Promise<any[]> {
     return new Promise((resolve, reject) => {
@@ -457,8 +458,8 @@ class SocketService {
       }
 
       this.socket.emit(
-        "getNetflixContent",
-        { contentType },
+        "getStreamingContent",
+        { platform, contentType },
         (response: { shows: any[] } | { error: string }) => {
           if ("error" in response) {
             reject(new Error(response.error));
@@ -468,6 +469,12 @@ class SocketService {
         }
       );
     });
+  }
+
+  public async getNetflixContent(
+    contentType?: "movies" | "tv"
+  ): Promise<any[]> {
+    return this.getStreamingContent("netflix", contentType);
   }
 
   public async getShowDetails(

@@ -29,14 +29,18 @@ export class TMDBService {
   private readonly API_KEY: string;
   private readonly BASE_URL = "https://api.themoviedb.org/3";
   private readonly NETFLIX_PROVIDER_ID = 8; // Netflix's ID in TMDB
+  private readonly HULU_PROVIDER_ID = 15; // Hulu's ID in TMDB
   private cache: Map<string, { data: any; timestamp: number }> = new Map();
   private readonly CACHE_DURATION = 1000 * 60 * 60; // 1 hour
   private readonly SHOWS_CACHE_DURATION = 1000 * 60 * 60 * 24; // 24 hours
-  private showsCache: {
-    data: Show[];
-    timestamp: number;
-    contentType?: string;
-  } | null = null;
+  private showsCache: Map<
+    string,
+    {
+      data: Show[];
+      timestamp: number;
+      contentType?: string;
+    }
+  > = new Map();
 
   private constructor() {
     const apiKey = process.env.TMDB_API_KEY;
@@ -167,30 +171,39 @@ export class TMDBService {
     return convertedShow;
   }
 
-  public async getNetflixContent(
+  public async getStreamingContent(
+    platform: "netflix" | "hulu" = "netflix",
     contentType?: "movies" | "tv"
   ): Promise<Show[]> {
     try {
+      const providerId =
+        platform === "netflix"
+          ? this.NETFLIX_PROVIDER_ID
+          : this.HULU_PROVIDER_ID;
+      const platformName = platform === "netflix" ? "Netflix" : "Hulu";
+
       console.log(
-        `Server: Getting Netflix ${
+        `Server: Getting ${platformName} ${
           contentType || "all content"
         } from server cache...`
       );
 
-      // Check if we have cached shows data that's still valid
+      // Check if we have cached shows data for this platform and content type
+      const checkCacheKey = `${platform}-${contentType || "all"}`;
+      const cachedData = this.showsCache.get(checkCacheKey);
+
       if (
-        this.showsCache &&
-        Date.now() - this.showsCache.timestamp < this.SHOWS_CACHE_DURATION &&
-        this.showsCache.contentType === contentType
+        cachedData &&
+        Date.now() - cachedData.timestamp < this.SHOWS_CACHE_DURATION
       ) {
         console.log(
-          "Server: Using cached shows data (age:",
-          Math.round(
-            (Date.now() - this.showsCache.timestamp) / (1000 * 60 * 60)
-          ),
+          "Server: Using cached shows data for",
+          platform,
+          "(age:",
+          Math.round((Date.now() - cachedData.timestamp) / (1000 * 60 * 60)),
           "hours)"
         );
-        return this.showsCache.data;
+        return cachedData.data;
       }
 
       console.log("Server: Fetching fresh shows data from TMDB...");
@@ -201,7 +214,7 @@ export class TMDBService {
         let allMovies: any[] = [];
         for (let page = 1; page <= 20; page++) {
           // Fetch 20 pages to get ~400 movies
-          const moviesUrl = `${this.BASE_URL}/discover/movie?api_key=${this.API_KEY}&with_watch_providers=${this.NETFLIX_PROVIDER_ID}&watch_region=US&sort_by=popularity.desc&page=${page}`;
+          const moviesUrl = `${this.BASE_URL}/discover/movie?api_key=${this.API_KEY}&with_watch_providers=${providerId}&watch_region=US&sort_by=popularity.desc&page=${page}`;
           const moviesData = await this.fetchWithCache<TMDBResponse>(moviesUrl);
           allMovies.push(...moviesData.results);
 
@@ -255,7 +268,7 @@ export class TMDBService {
         let allTVShows: any[] = [];
         for (let page = 1; page <= 20; page++) {
           // Fetch 20 pages to get ~400 TV shows
-          const tvUrl = `${this.BASE_URL}/discover/tv?api_key=${this.API_KEY}&with_watch_providers=${this.NETFLIX_PROVIDER_ID}&watch_region=US&sort_by=popularity.desc&page=${page}`;
+          const tvUrl = `${this.BASE_URL}/discover/tv?api_key=${this.API_KEY}&with_watch_providers=${providerId}&watch_region=US&sort_by=popularity.desc&page=${page}`;
           const tvData = await this.fetchWithCache<TMDBResponse>(tvUrl);
           allTVShows.push(...tvData.results);
 
@@ -314,16 +327,17 @@ export class TMDBService {
       );
 
       // Cache the results for 24 hours
-      this.showsCache = {
+      const cacheKey = `${platform}-${contentType || "all"}`;
+      this.showsCache.set(cacheKey, {
         data: sortedShows,
         timestamp: Date.now(),
         contentType: contentType,
-      };
+      });
 
       console.log(
-        `Server: Cached ${sortedShows.length} shows for 24 hours (${
-          contentType || "all content"
-        })`
+        `Server: Cached ${
+          sortedShows.length
+        } shows for 24 hours (${platform}, ${contentType || "all content"})`
       );
 
       // Log first few shows for debugging
@@ -605,23 +619,83 @@ export class TMDBService {
   // Method to manually clear cache (useful for testing or admin purposes)
   public clearCache(): void {
     this.cache.clear();
-    this.showsCache = null;
+    this.showsCache.clear();
     console.log("Server: TMDB cache cleared");
   }
 
   // Method to manually refresh shows cache
   public async refreshShowsCache(contentType?: "movies" | "tv"): Promise<void> {
     console.log("Server: Manually refreshing shows cache...");
-    this.showsCache = null;
-    await this.getNetflixContent(contentType);
+    this.showsCache.clear();
+    await this.getStreamingContent("netflix", contentType);
     console.log("Server: Shows cache refreshed successfully");
   }
 
+  // Method to pre-load all platforms for all content types
+  public async preloadAllPlatforms(): Promise<void> {
+    console.log("Server: Pre-loading all platforms for all content types...");
+
+    try {
+      // Pre-load Netflix content
+      console.log("Server: Pre-loading Netflix content...");
+      await this.getStreamingContent("netflix", "movies");
+      await this.getStreamingContent("netflix", "tv");
+
+      // Pre-load Hulu content
+      console.log("Server: Pre-loading Hulu content...");
+      await this.getStreamingContent("hulu", "movies");
+      await this.getStreamingContent("hulu", "tv");
+
+      console.log(
+        "Server: Successfully pre-loaded all platforms and content types!"
+      );
+    } catch (error) {
+      console.error("Server: Error pre-loading platforms:", error);
+    }
+  }
+
+  // Backward compatibility method
+  public async getNetflixContent(
+    contentType?: "movies" | "tv"
+  ): Promise<Show[]> {
+    return this.getStreamingContent("netflix", contentType);
+  }
+
   // Method to get cache status
-  public getCacheStatus(): { size: number; keys: string[] } {
+  public getCacheStatus(): {
+    apiCacheSize: number;
+    apiCacheKeys: string[];
+    showsCacheSize: number;
+    showsCacheKeys: string[];
+    showsCacheDetails: Array<{
+      key: string;
+      contentType: string;
+      platform: string;
+      showCount: number;
+      ageHours: number;
+    }>;
+  } {
+    const showsCacheDetails = Array.from(this.showsCache.entries()).map(
+      ([key, data]) => {
+        const [platform, contentType] = key.split("-");
+        return {
+          key,
+          contentType: contentType || "all",
+          platform,
+          showCount: data.data.length,
+          ageHours: Math.round(
+            (Date.now() - data.timestamp) / (1000 * 60 * 60)
+          ),
+        };
+      }
+    );
+
     return {
-      size: this.cache.size,
-      keys: Array.from(this.cache.keys()),
+      apiCacheSize: this.cache.size,
+      apiCacheKeys: Array.from(this.cache.keys()),
+      showsCacheSize: this.showsCache.size,
+      showsCacheKeys: Array.from(this.showsCache.keys()),
+      showsCacheDetails,
     };
   }
 }
